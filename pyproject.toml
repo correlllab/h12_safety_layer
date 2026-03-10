@@ -1,0 +1,14 @@
+[project]
+name = "h12-safety-layer"
+version = "0.0.0"
+description = "Safety layer for h12 robot"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.6",
+    "scipy>=1.15.3",
+    "unitree-sdk2py",
+]
+
+[tool.uv.sources]
+unitree-sdk2py = { git = "https://github.com/Oya-Tomo/unitree_sdk2_python" }
