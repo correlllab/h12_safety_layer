@@ -1,6 +1,7 @@
 '''
 Unitree SDK2 channel subscriber example.
-This module subscribes to `std_msgs/String_` payloads from `demo/topic`.
+This module subscribes to `builtin_interfaces/Time_` timestamps from `demo/topic`
+and prints the one-way latency derived from the embedded send timestamp.
 '''
 
 from __future__ import annotations
@@ -8,19 +9,25 @@ from __future__ import annotations
 import time
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
-from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+from unitree_sdk2py.idl.builtin_interfaces.msg.dds_ import Time_
+
+_seq = 0
 
 
-def on_message(msg: String_) -> None:
-    '''Print incoming payload from the subscribed topic'''
-    print(f'[SUB] {msg.data}')
+def on_message(msg: Time_) -> None:
+    '''Compute and print one-way latency from the received timestamp'''
+    global _seq
+    send_t = msg.sec + msg.nanosec * 1e-9
+    latency_ms = (time.time() - send_t) * 1000.0
+    print(f'[SUB] seq={_seq}  latency={latency_ms:.3f} ms')
+    _seq += 1
 
 
 def main() -> None:
     '''Initialize a channel subscriber and wait for callbacks'''
     ChannelFactoryInitialize(0)
 
-    subscriber = ChannelSubscriber('demo/topic', String_)
+    subscriber = ChannelSubscriber('demo/topic', Time_)
     subscriber.Init(on_message, 10)
 
     while True:
