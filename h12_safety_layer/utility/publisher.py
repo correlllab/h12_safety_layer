@@ -4,8 +4,6 @@ This module publishes `builtin_interfaces/Time_` timestamps to `demo/topic`.
 The subscriber measures one-way latency by comparing against its local clock.
 '''
 
-from __future__ import annotations
-
 import time
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher

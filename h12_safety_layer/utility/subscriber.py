@@ -4,8 +4,6 @@ This module subscribes to `builtin_interfaces/Time_` timestamps from `demo/topic
 and prints the one-way latency derived from the embedded send timestamp.
 '''
 
-from __future__ import annotations
-
 import time
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
