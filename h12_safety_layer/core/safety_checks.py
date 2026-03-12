@@ -1,34 +1,21 @@
 '''Safety checks for low_cmd and low_state messages'''
 
 import copy
-import math
 import numpy as np
-from typing import Any
 
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+
 from h12_safety_layer.core.joint_limits import MOTOR_COUNT
 
-class CommandValidationError(Exception):
+class CmdValidationError(Exception):
     '''Command payload contains non-finite values'''
 
 class EStopTriggered(Exception):
     '''E-stop condition was met from low_state feedback'''
 
-def _is_finite(value: float) -> bool:
-    return math.isfinite(float(value))
-
-def _clip_abs(value: float, max_abs: float) -> float:
-    if value > max_abs:
-        return max_abs
-    if value < -max_abs:
-        return -max_abs
-    return value
-
 def clone_cmd(msg: LowCmd_) -> LowCmd_:
     '''Create a deep copy of low_cmd before mutating'''
-
     return copy.deepcopy(msg)
-
 
 def _cmd_arrays(msg: LowCmd_) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     q = np.asarray([float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float64)
@@ -38,23 +25,22 @@ def _cmd_arrays(msg: LowCmd_) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.nd
     kd = np.asarray([float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float64)
     return q, dq, tau, kp, kd
 
-
-def sanitize_and_clip_command(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tuple[LowCmd_, int]:
+def clip_low_cmd(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tuple[LowCmd_, int]:
     '''Validate finite values and clip command to configured limits'''
 
     out = clone_cmd(msg)
     q_raw, dq_raw, tau_raw, kp_raw, kd_raw = _cmd_arrays(out)
 
     if not np.all(np.isfinite(q_raw)):
-        raise CommandValidationError('q contains non-finite values')
+        raise CmdValidationError('q contains non-finite values')
     if not np.all(np.isfinite(dq_raw)):
-        raise CommandValidationError('dq contains non-finite values')
+        raise CmdValidationError('dq contains non-finite values')
     if not np.all(np.isfinite(tau_raw)):
-        raise CommandValidationError('tau contains non-finite values')
+        raise CmdValidationError('tau contains non-finite values')
     if not np.all(np.isfinite(kp_raw)):
-        raise CommandValidationError('kp contains non-finite values')
+        raise CmdValidationError('kp contains non-finite values')
     if not np.all(np.isfinite(kd_raw)):
-        raise CommandValidationError('kd contains non-finite values')
+        raise CmdValidationError('kd contains non-finite values')
 
     q_low = limits['q_clip_limits'][:, 0]
     q_high = limits['q_clip_limits'][:, 1]
@@ -74,17 +60,16 @@ def sanitize_and_clip_command(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tu
     clipped_count = int(np.count_nonzero(changed))
 
     for i in range(MOTOR_COUNT):
-        cmd = out.motor_cmd[i]
-        cmd.q = float(q_new[i])
-        cmd.dq = float(dq_new[i])
-        cmd.tau = float(tau_new[i])
-        cmd.kp = float(kp_new[i])
-        cmd.kd = float(kd_new[i])
+        motor_cmd = out.motor_cmd[i]
+        motor_cmd.q = float(q_new[i])
+        motor_cmd.dq = float(dq_new[i])
+        motor_cmd.tau = float(tau_new[i])
+        motor_cmd.kp = float(kp_new[i])
+        motor_cmd.kd = float(kd_new[i])
 
     return out, clipped_count
 
-
-def assert_state_within_estop_limits(msg: LowState_, limits: dict[str, np.ndarray]) -> None:
+def check_estop_limits(msg: LowState_, limits: dict[str, np.ndarray]) -> None:
     '''Raise if low_state exceeds configured estop limits'''
 
     q = np.asarray([float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float64)
@@ -112,17 +97,15 @@ def assert_state_within_estop_limits(msg: LowState_, limits: dict[str, np.ndarra
         i = int(bad_tau[0])
         raise EStopTriggered(f'motor {i} tau out of estop range: {tau[i]}')
 
-
-def make_estop_cmd_like(template: LowCmd_) -> LowCmd_:
+def make_estop_cmd(template: LowCmd_) -> LowCmd_:
     '''Create an estop command preserving headers while zeroing actuators'''
-
     out = clone_cmd(template)
     for i in range(MOTOR_COUNT):
-        cmd = out.motor_cmd[i]
-        cmd.mode = 0
-        cmd.q = 0.0
-        cmd.dq = 0.0
-        cmd.tau = 0.0
-        cmd.kp = 0.0
-        cmd.kd = 0.0
+        motor_cmd = out.motor_cmd[i]
+        motor_cmd.mode = 0
+        motor_cmd.q = 0.0
+        motor_cmd.dq = 0.0
+        motor_cmd.tau = 0.0
+        motor_cmd.kp = 0.0
+        motor_cmd.kd = 0.0
     return out

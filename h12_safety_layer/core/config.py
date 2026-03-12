@@ -5,7 +5,7 @@ import numpy as np
 from typing import Any
 from pathlib import Path
 
-from h12_safety_layer.utility.joint_limits import (
+from h12_safety_layer.core.joint_limits import (
     MOTOR_COUNT,
     JOINT_NAMES,
     URDF_POSITION_LIMITS,
