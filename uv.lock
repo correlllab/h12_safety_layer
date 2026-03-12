@@ -61,7 +61,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "scipy", specifier = ">=1.15.3" },
-    { name = "unitree-sdk2py", git = "https://github.com/Oya-Tomo/unitree_sdk2_python" },
+    { name = "unitree-sdk2py", editable = "../unitree_sdk2_python_uv" },
 ]
 
 [[package]]
@@ -497,10 +497,17 @@ wheels = [
 [[package]]
 name = "unitree-sdk2py"
 version = "1.0.1"
-source = { git = "https://github.com/Oya-Tomo/unitree_sdk2_python#dc85ee35a5272f83915ac08027bbe5adf99af42e" }
+source = { editable = "../unitree_sdk2_python_uv" }
 dependencies = [
     { name = "cyclonedds" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "opencv-python" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cyclonedds", specifier = "==0.10.2" },
+    { name = "numpy" },
     { name = "opencv-python" },
 ]

@@ -7,6 +7,7 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 - This repo depends on [Unitree Python SDK](https://github.com/unitreerobotics/unitree_sdk2_python) to communicate with the robot.
 - `uv` Installation:
     - Easiest way to run scripts in this repo is to use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+    - Clone the unitree sdk to the parent folder of current project.
     - Commands:
 
         ```bash
