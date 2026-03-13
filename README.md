@@ -11,19 +11,21 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
   git submodule update --init --recursive
   ```
 
-- `uv` Installation:
-    - Easiest way to run scripts in this repo is to use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
-    - Commands:
+### `uv` Installation
 
-        ```bash
-        uv sync # install dependencies to this repo including unitree sdk
-        uv run PATH_TO_SCRIPT
-        ```
+- Easiest way to run scripts in this repo is to use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- Commands:
 
-- Manual Installation:
-    - `requirements.txt` lists dependencies that can be installed by `pip`.
-    - Commands:
+    ```bash
+    uv sync # install dependencies to this repo including unitree sdk
+    uv run PATH_TO_SCRIPT
+    ```
 
-        ```bash
-        pip install -r requirements.txt # install dependencies for this repo
-        ```
+### `pip` Installation
+
+- `requirements.txt` lists dependencies that can be installed by `pip`.
+- Commands:
+
+    ```bash
+    pip install -r requirements.txt # install dependencies for this repo
+    ```
