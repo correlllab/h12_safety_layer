@@ -43,7 +43,6 @@ class SafetyLayer:
         else:
             ChannelFactoryInitialize(self._config['network']['domain_id'])
         # store last command
-        self._crc = CRC()
         self._last_cmd: LowCmd_ = LowCmdDefault()
         self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_dq_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
@@ -51,6 +50,7 @@ class SafetyLayer:
         self._last_kp_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_kd_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         # init publishers and subscribers
+        self._crc = CRC()
         self._cmd_sub = ChannelSubscriber(self._config['topics']['low_cmd_in'], LowCmd_)
         self._state_sub = ChannelSubscriber(self._config['topics']['low_state'], LowState_)
         self._cmd_pub = ChannelPublisher(self._config['topics']['low_cmd_out'], LowCmd_)
@@ -78,9 +78,6 @@ class SafetyLayer:
 
         while self._running:
             time.sleep(0.2)
-
-        self.stop()
-        self._log_event({'event': 'relay_stopped'})
 
     def stop(self) -> None:
         '''Stop relay and flush logger'''

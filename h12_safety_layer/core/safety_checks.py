@@ -71,27 +71,26 @@ def clip_low_cmd(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tuple[LowCmd_, 
 
 def check_estop_limits(msg: LowState_, limits: dict[str, np.ndarray]) -> None:
     '''Raise if low_state exceeds configured estop limits'''
-
     q = np.asarray([float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float64)
     dq = np.asarray([float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float64)
     tau = np.asarray([float(msg.motor_state[i].tau_est) for i in range(MOTOR_COUNT)], dtype=np.float64)
-
+    # check for inf and nan
     if not np.all(np.isfinite(q)) or not np.all(np.isfinite(dq)) or not np.all(np.isfinite(tau)):
         raise EStopTriggered('low_state contains non-finite values')
 
     q_low = limits['q_estop_limits'][:, 0]
     q_high = limits['q_estop_limits'][:, 1]
-
+    # check joint position q limits
     bad_q = np.where(np.logical_or(q < q_low, q > q_high))[0]
     if bad_q.size > 0:
         i = int(bad_q[0])
         raise EStopTriggered(f'motor {i} q out of estop range: {q[i]}')
-
+    # check joint velocity dq limits
     bad_dq = np.where(np.abs(dq) > limits['dq_estop_limits'])[0]
     if bad_dq.size > 0:
         i = int(bad_dq[0])
         raise EStopTriggered(f'motor {i} dq out of estop range: {dq[i]}')
-
+    # check joint torque tau limits
     bad_tau = np.where(np.abs(tau) > limits['tau_estop_limits'])[0]
     if bad_tau.size > 0:
         i = int(bad_tau[0])
