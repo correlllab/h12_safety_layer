@@ -90,6 +90,7 @@ class ChunkLogger:
         self._running = False
         self._queue.put(None)
         self._thread.join(timeout=3.0)
+        print('ChunkLogger stopped')
 
     def _worker(self) -> None:
         '''Worker thread to consume samples and write chunk files'''

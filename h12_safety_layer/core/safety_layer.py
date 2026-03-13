@@ -79,6 +79,9 @@ class SafetyLayer:
         while self._running:
             time.sleep(0.2)
 
+        self.stop()
+        self._log_event({'event': 'relay_stopped'})
+
     def stop(self) -> None:
         '''Stop relay and flush logger'''
         self._running = False
@@ -100,10 +103,8 @@ class SafetyLayer:
 
     def _on_low_cmd(self, msg: LowCmd_) -> None:
         '''Callback for incoming low_cmd'''
-        recv_ns = time.time_ns()
         with self._lock:
             self._last_cmd = msg
-            self._log_event({'event': 'rx_low_cmd', 'recv_ns': recv_ns, 'motor_count': MOTOR_COUNT})
 
             # if estop is already triggered, just publish estop command
             if self._estop:
@@ -175,6 +176,12 @@ class SafetyLayer:
             try:
                 check_estop_limits(msg, self._config['limits'])
             except EStopTriggered as e:
+                print(f'q_cmd: {self._last_q_cmd}')
+                print(f'dq_cmd: {self._last_dq_cmd}')
+                print(f'tau_cmd: {self._last_tau_cmd}')
+                print(f'q: {q}')
+                print(f'dq: {dq}')
+                print(f'ddq: {ddq}')
                 self._trigger_estop(str(e))
                 out = make_estop_cmd(self._last_cmd)
                 self._publish_checked(out, source='state_estop')
@@ -189,13 +196,12 @@ class SafetyLayer:
         self._last_kp_cmd = np.asarray([float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32)
         self._last_kd_cmd = np.asarray([float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32)
 
-        self._log_event({'event': 'tx_low_cmd', 'source': source, 'clipped_count': clipped, 'estop': self._estop})
-
     def _trigger_estop(self, reason: str) -> None:
         if self._estop:
             return
         self._estop = True
         self._estop_reason = reason
+        self._running = False
         self._log_event({'event': 'estop_triggered', 'reason': reason})
 
     def _log_event(self, data: dict[str, Any]) -> None:
