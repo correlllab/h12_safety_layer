@@ -11,5 +11,10 @@ dependencies = [
     "unitree-sdk2py",
 ]
 
+[tool.uv.workspace]
+members = [
+    "submodules/unitree_sdk2_python",
+]
+
 [tool.uv.sources]
-unitree-sdk2py = { path = "../unitree_sdk2_python_uv", editable = true }
+unitree-sdk2py = { workspace = true, editable = true }

@@ -6,6 +6,12 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[manifest]
+members = [
+    "h12-safety-layer",
+    "unitree-sdk2py",
+]
+
 [[package]]
 name = "click"
 version = "8.3.1"
@@ -61,7 +67,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "scipy", specifier = ">=1.15.3" },
-    { name = "unitree-sdk2py", editable = "../unitree_sdk2_python_uv" },
+    { name = "unitree-sdk2py", editable = "submodules/unitree_sdk2_python" },
 ]
 
 [[package]]
@@ -497,7 +503,7 @@ wheels = [
 [[package]]
 name = "unitree-sdk2py"
 version = "1.0.1"
-source = { editable = "../unitree_sdk2_python_uv" }
+source = { editable = "submodules/unitree_sdk2_python" }
 dependencies = [
     { name = "cyclonedds" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
