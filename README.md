@@ -17,7 +17,7 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 - Commands:
 
     ```bash
-    uv sync # install dependencies to this repo including unitree sdk
+    uv sync # install dependencies for this repo including unitree sdk
     uv run PATH_TO_SCRIPT
     ```
 
@@ -27,5 +27,5 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 - Commands:
 
     ```bash
-    pip install -r requirements.txt # install dependencies for this repo
+    pip install -r requirements.txt # install dependencies for this repo including unitree sdk
     ```
