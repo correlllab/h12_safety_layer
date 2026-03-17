@@ -50,14 +50,14 @@ def clip_low_cmd(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tuple[LowCmd_, 
     kp_new = np.clip(kp_raw, 0.0, limits['kp_clip_max'])
     kd_new = np.clip(kd_raw, 0.0, limits['kd_clip_max'])
 
-    changed = np.logical_or.reduce((
-        q_new != q_raw,
-        dq_new != dq_raw,
-        tau_new != tau_raw,
-        kp_new != kp_raw,
-        kd_new != kd_raw,
-    ))
-    clipped_count = int(np.count_nonzero(changed))
+    # changed = np.logical_or.reduce((
+    #     q_new != q_raw,
+    #     dq_new != dq_raw,
+    #     tau_new != tau_raw,
+    #     kp_new != kp_raw,
+    #     kd_new != kd_raw,
+    # ))
+    # clipped_count = int(np.count_nonzero(changed))
 
     for i in range(MOTOR_COUNT):
         motor_cmd = out.motor_cmd[i]
@@ -67,7 +67,7 @@ def clip_low_cmd(msg: LowCmd_, limits: dict[str, np.ndarray]) -> tuple[LowCmd_, 
         motor_cmd.kp = float(kp_new[i])
         motor_cmd.kd = float(kd_new[i])
 
-    return out, clipped_count
+    return out
 
 def check_estop_limits(msg: LowState_, limits: dict[str, np.ndarray]) -> None:
     '''Raise if low_state exceeds configured estop limits'''

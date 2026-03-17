@@ -9,6 +9,9 @@ network:
   domain_id: 0
   interface: ''
 
+control:
+  publish_hz: 500.0
+
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
   clip:

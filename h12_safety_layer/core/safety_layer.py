@@ -1,5 +1,6 @@
 '''Safety layer for full-body H12 control'''
 
+import copy
 import time
 import json
 import threading
@@ -43,18 +44,22 @@ class SafetyLayer:
         else:
             ChannelFactoryInitialize(self._config['network']['domain_id'])
         # store last command
-        self._last_cmd: LowCmd_ = LowCmdDefault()
+        self._last_cmd = LowCmdDefault()
         self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_dq_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_tau_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_kp_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_kd_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
+        self._desired_cmd = make_estop_cmd(self._last_cmd)
         # init publishers and subscribers
         self._crc = CRC()
         self._cmd_sub = ChannelSubscriber(self._config['topics']['low_cmd_in'], LowCmd_)
         self._state_sub = ChannelSubscriber(self._config['topics']['low_state'], LowState_)
         self._cmd_pub = ChannelPublisher(self._config['topics']['low_cmd_out'], LowCmd_)
-        self._cmd_pub.Init()
+        self._publish_hz = float(self._config['control']['publish_hz'])
+        self._publisher_thread = threading.Thread(
+            target=self._publisher_loop, name='low_cmd_publisher', daemon=True
+        )
         # setup async logger
         self._logger = None
         if self._config['logging']['enabled']:
@@ -71,9 +76,10 @@ class SafetyLayer:
         '''Start subscriptions and keep relay alive'''
         self._validate_mode()
         self._running = True
-
         self._state_sub.Init(self._on_low_state, 10)
         self._cmd_sub.Init(self._on_low_cmd, 10)
+        self._cmd_pub.Init()
+        self._publisher_thread.start()
         self._log_event({'event': 'relay_started', 'mode': self._config['mode']})
 
         while self._running:
@@ -82,6 +88,8 @@ class SafetyLayer:
     def stop(self) -> None:
         '''Stop relay and flush logger'''
         self._running = False
+        self._publisher_thread.join(timeout=1.0)
+        self._publisher_thread = None
         self._cmd_sub.Close()
         self._state_sub.Close()
         self._cmd_pub.Close()
@@ -99,29 +107,79 @@ class SafetyLayer:
         raise ValueError(f'unknown mode: {self._config["mode"]}')
 
     def _on_low_cmd(self, msg: LowCmd_) -> None:
-        '''Callback for incoming low_cmd'''
+        '''Update local desired command from incoming low_cmd'''
         with self._lock:
             self._last_cmd = msg
 
-            # if estop is already triggered, just publish estop command
             if self._estop:
-                out = make_estop_cmd(msg)
-                self._publish_checked(out, source='estop_passthrough')
                 return
 
-            # validate and clip command, trigger estop if validation fails
             try:
-                out, clipped = clip_low_cmd(msg, self._config['limits'])
+                out = clip_low_cmd(msg, self._config['limits'])
             except CmdValidationError as e:
-                self._trigger_estop(f'command validation failed: {e}')
-                out = make_estop_cmd(msg)
-                self._publish_checked(out, source='invalid_cmd_estop')
+                self._trigger_estop(f'Command validation failed: {e}')
+                self._desired_cmd = make_estop_cmd(self._last_cmd)
                 return
 
-            # publish checked command
-            self._publish_checked(out, source='relay', clipped=clipped)
+            self._desired_cmd = out
+
+    def _publisher_loop(self) -> None:
+        dt = 1.0 / self._publish_hz
+        while self._running:
+            start_time = time.time()
+            with self._lock:
+                if self._estop:
+                    out = make_estop_cmd(self._last_cmd)
+                else:
+                    out = copy.deepcopy(self._desired_cmd)
+            self._publish_checked(out)
+            time.sleep(max(0.0, dt - (time.time() - start_time)))
 
     def _on_low_state(self, msg: LowState_) -> None:
+        '''Check state limits for estop and log sample'''
+        with self._lock:
+            if self._estop:
+                return
+            try:
+                check_estop_limits(msg, self._config['limits'])
+            except EStopTriggered as e:
+                q = np.asarray([float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
+                dq = np.asarray([float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
+                ddq = np.asarray([float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)], dtype=np.float32)
+                print(f'q_cmd: {self._last_q_cmd}')
+                print(f'dq_cmd: {self._last_dq_cmd}')
+                print(f'tau_cmd: {self._last_tau_cmd}')
+                print(f'q: {q}')
+                print(f'dq: {dq}')
+                print(f'ddq: {ddq}')
+                self._trigger_estop(str(e))
+                self._desired_cmd = make_estop_cmd(self._last_cmd)
+
+        self._log_sample(msg)
+
+    def _publish_checked(self, msg: LowCmd_) -> None:
+        # write message
+        msg.crc = self._crc.Crc(msg)
+        self._cmd_pub.Write(msg)
+        # write local copy for logging
+        self._last_q_cmd = np.asarray([float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
+        self._last_dq_cmd = np.asarray([float(msg.motor_cmd[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
+        self._last_tau_cmd = np.asarray([float(msg.motor_cmd[i].tau) for i in range(MOTOR_COUNT)], dtype=np.float32)
+        self._last_kp_cmd = np.asarray([float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32)
+        self._last_kd_cmd = np.asarray([float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32)
+
+    def _trigger_estop(self, reason: str) -> None:
+        if self._estop:
+            return
+        self._estop = True
+        self._estop_reason = reason
+        self._log_event({'event': 'estop_triggered', 'reason': reason})
+
+    def _log_event(self, data: dict[str, Any]) -> None:
+        print(json.dumps(data, sort_keys=True))
+
+    def _log_sample(self, msg: LowState_) -> None:
+        '''Build logging dict from low_state message and log via logger'''
         time_stamp = time.time()
 
         mode = np.asarray([int(msg.motor_state[i].mode) for i in range(MOTOR_COUNT)], dtype=np.uint8)
@@ -141,69 +199,29 @@ class SafetyLayer:
         imu_rpy = np.asarray(msg.imu_state.rpy, dtype=np.float32)
         imu_temperature = np.int16(msg.imu_state.temperature)
 
-        self._log_sample(
-            {
-                'time_stamp': time_stamp,
-                'mode': mode,
-                'q': q,
-                'dq': dq,
-                'ddq': ddq,
-                'tau_est': tau_est,
-                'temperature': temperature,
-                'vol': vol,
-                'sensor': sensor,
-                'motorstate': motorstate,
-                'reserve': reserve,
-                'imu_quaternion': imu_quaternion,
-                'imu_gyroscope': imu_gyroscope,
-                'imu_accelerometer': imu_accelerometer,
-                'imu_rpy': imu_rpy,
-                'imu_temperature': imu_temperature,
-                'q_cmd': self._last_q_cmd.copy(),
-                'dq_cmd': self._last_dq_cmd.copy(),
-                'tau_cmd': self._last_tau_cmd.copy(),
-                'kp_cmd': self._last_kp_cmd.copy(),
-                'kd_cmd': self._last_kd_cmd.copy(),
-            }
-        )
+        sample = {
+            'time_stamp': time_stamp,
+            'mode': mode,
+            'q': q,
+            'dq': dq,
+            'ddq': ddq,
+            'tau_est': tau_est,
+            'temperature': temperature,
+            'vol': vol,
+            'sensor': sensor,
+            'motorstate': motorstate,
+            'reserve': reserve,
+            'imu_quaternion': imu_quaternion,
+            'imu_gyroscope': imu_gyroscope,
+            'imu_accelerometer': imu_accelerometer,
+            'imu_rpy': imu_rpy,
+            'imu_temperature': imu_temperature,
+            'q_cmd': self._last_q_cmd.copy(),
+            'dq_cmd': self._last_dq_cmd.copy(),
+            'tau_cmd': self._last_tau_cmd.copy(),
+            'kp_cmd': self._last_kp_cmd.copy(),
+            'kd_cmd': self._last_kd_cmd.copy(),
+        }
 
-        with self._lock:
-            if self._estop:
-                return
-            try:
-                check_estop_limits(msg, self._config['limits'])
-            except EStopTriggered as e:
-                print(f'q_cmd: {self._last_q_cmd}')
-                print(f'dq_cmd: {self._last_dq_cmd}')
-                print(f'tau_cmd: {self._last_tau_cmd}')
-                print(f'q: {q}')
-                print(f'dq: {dq}')
-                print(f'ddq: {ddq}')
-                self._trigger_estop(str(e))
-                out = make_estop_cmd(self._last_cmd)
-                self._publish_checked(out, source='state_estop')
-
-    def _publish_checked(self, msg: LowCmd_, source: str, clipped: int = 0) -> None:
-        msg.crc = self._crc.Crc(msg)
-        self._cmd_pub.Write(msg)
-
-        self._last_q_cmd = np.asarray([float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_dq_cmd = np.asarray([float(msg.motor_cmd[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_tau_cmd = np.asarray([float(msg.motor_cmd[i].tau) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_kp_cmd = np.asarray([float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_kd_cmd = np.asarray([float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32)
-
-    def _trigger_estop(self, reason: str) -> None:
-        if self._estop:
-            return
-        self._estop = True
-        self._estop_reason = reason
-        self._running = False
-        self._log_event({'event': 'estop_triggered', 'reason': reason})
-
-    def _log_event(self, data: dict[str, Any]) -> None:
-        print(json.dumps(data, sort_keys=True))
-
-    def _log_sample(self, sample: dict[str, Any]) -> None:
         if self._logger:
             self._logger.log_sample(sample)

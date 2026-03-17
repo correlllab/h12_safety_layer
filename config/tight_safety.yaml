@@ -9,6 +9,9 @@ network:
   domain_id: 0
   interface: ''
 
+control:
+  publish_hz: 500.0
+
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
   clip:
@@ -52,13 +55,13 @@ limits:
       - 0.30 # left_hip_pitch_joint
       - 1.00 # left_hip_roll_joint
       - 0.40 # left_knee_joint
-      - 0.80 # left_ankle_pitch_joint
+      - 0.90 # left_ankle_pitch_joint
       - 0.90 # left_ankle_roll_joint
       - 0.30 # right_hip_yaw_joint
       - 0.30 # right_hip_pitch_joint
       - 1.00 # right_hip_roll_joint
       - 0.40 # right_knee_joint
-      - 0.80 # right_ankle_pitch_joint
+      - 0.90 # right_ankle_pitch_joint
       - 0.90 # right_ankle_roll_joint
       - 0.10 # torso_joint
       - 0.50 # left_shoulder_pitch_joint

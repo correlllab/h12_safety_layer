@@ -84,7 +84,12 @@ def load_config(path: str | Path) -> dict[str, Any]:
     topics = raw.get('topics', {})
     network = raw.get('network', {})
     logging = raw.get('logging', {})
+    control = raw.get('control', {})
     limits = raw.get('limits', {})
+
+    publish_hz = float(control.get('publish_hz', 500.0))
+    if publish_hz <= 0.0:
+        raise ValueError('control.publish_hz must be positive')
 
     clip_policy = limits.get('clip', limits.get('enforce', {}))
     estop_policy = limits.get('estop', {})
@@ -102,6 +107,9 @@ def load_config(path: str | Path) -> dict[str, Any]:
         'network': {
             'domain_id': int(network.get('domain_id', 0)),
             'interface': None if network.get('interface') in (None, '') else str(network.get('interface')),
+        },
+        'control': {
+            'publish_hz': publish_hz,
         },
         'limits': {
             'q_clip_limits': clip_limits['q_limits'],
