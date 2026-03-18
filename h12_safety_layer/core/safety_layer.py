@@ -27,6 +27,7 @@ from h12_safety_layer.core.safety_checks import (
 LOG_SAMPLES_PER_CHUNK = 1000
 LOG_WRITE_HZ = 5.0
 LOG_MAX_QUEUE_SIZE = 10000
+SPLIT_UPPER_START = 12
 
 
 class SafetyLayer:
@@ -37,6 +38,8 @@ class SafetyLayer:
         self._estop = False
         self._estop_reason = ''
         self._running = False
+        # parse mode
+        self._mode = self._config['mode'].strip().lower()
         # init DDS network interface
         if self._config['network']['interface']:
             ChannelFactoryInitialize(self._config['network']['domain_id'],
@@ -50,10 +53,14 @@ class SafetyLayer:
         self._last_tau_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_kp_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._last_kd_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
-        self._desired_cmd = make_estop_cmd(self._last_cmd)
+        self._desired_cmd_full = make_estop_cmd(self._last_cmd)
+        self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
+        self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
         # init publishers and subscribers
         self._crc = CRC()
-        self._cmd_sub = ChannelSubscriber(self._config['topics']['low_cmd_in'], LowCmd_)
+        self._cmd_sub_full = None
+        self._cmd_sub_lower = None
+        self._cmd_sub_upper = None
         self._state_sub = ChannelSubscriber(self._config['topics']['low_state'], LowState_)
         self._cmd_pub = ChannelPublisher(self._config['topics']['low_cmd_out'], LowCmd_)
         self._publish_hz = float(self._config['control']['publish_hz'])
@@ -76,11 +83,13 @@ class SafetyLayer:
         '''Start subscriptions and keep relay alive'''
         self._validate_mode()
         self._running = True
+        # initialize subscribers and publishers
+        self._init_cmd_subscribers()
         self._state_sub.Init(self._on_low_state, 10)
-        self._cmd_sub.Init(self._on_low_cmd, 10)
         self._cmd_pub.Init()
         self._publisher_thread.start()
-        self._log_event({'event': 'relay_started', 'mode': self._config['mode']})
+        # successfully started, log event
+        self._log_event({'event': 'relay_started', 'mode': self._mode})
 
         while self._running:
             time.sleep(0.2)
@@ -90,7 +99,7 @@ class SafetyLayer:
         self._running = False
         self._publisher_thread.join(timeout=1.0)
         self._publisher_thread = None
-        self._cmd_sub.Close()
+        self._close_cmd_subscribers()
         self._state_sub.Close()
         self._cmd_pub.Close()
         self._log_event({'event': 'relay_stopped'})
@@ -99,29 +108,91 @@ class SafetyLayer:
 
     def _validate_mode(self) -> None:
         '''Validate config mode and raise if unsupported'''
-        mode = self._config['mode'].strip().lower()
-        if mode == 'full_body_mode':
+        if self._mode == 'full_body_mode':
             return
-        if mode == 'split_mode':
-            raise NotImplementedError('mode split_mode is reserved for future dual-low_state support')
+        if self._mode == 'split_mode':
+            return
         raise ValueError(f'unknown mode: {self._config["mode"]}')
 
-    def _on_low_cmd(self, msg: LowCmd_) -> None:
-        '''Update local desired command from incoming low_cmd'''
+    def _init_cmd_subscribers(self) -> None:
+        '''Init low_cmd subscribers based on configured mode'''
+        if self._mode == 'full_body_mode':
+            self._cmd_sub_full = ChannelSubscriber(self._config['topics']['low_cmd_in'], LowCmd_)
+            self._cmd_sub_full.Init(self._on_low_cmd_full, 10)
+        # split mode
+        else:
+            self._cmd_sub_lower = ChannelSubscriber(self._config['topics']['low_cmd_lower_in'], LowCmd_)
+            self._cmd_sub_upper = ChannelSubscriber(self._config['topics']['low_cmd_upper_in'], LowCmd_)
+            self._cmd_sub_lower.Init(self._on_low_cmd_lower, 10)
+            self._cmd_sub_upper.Init(self._on_low_cmd_upper, 10)
+
+    def _close_cmd_subscribers(self) -> None:
+        '''Close any active low_cmd subscribers'''
+        if self._cmd_sub_full is not None:
+            self._cmd_sub_full.Close()
+            self._cmd_sub_full = None
+        if self._cmd_sub_lower is not None:
+            self._cmd_sub_lower.Close()
+            self._cmd_sub_lower = None
+        if self._cmd_sub_upper is not None:
+            self._cmd_sub_upper.Close()
+            self._cmd_sub_upper = None
+
+    def _clip_cmd_or_estop(self, msg: LowCmd_, source: str) -> LowCmd_ | None:
+        '''Clip incoming command and trigger estop on validation failures'''
+        self._last_cmd = msg
+        if self._estop:
+            return None
+
+        try:
+            return clip_low_cmd(msg, self._config['limits'])
+        except CmdValidationError as e:
+            self._trigger_estop(f'Command validation failed on {source}: {e}')
+            self._desired_cmd_full = make_estop_cmd(self._last_cmd)
+            self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
+            self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
+            return None
+
+    def _on_low_cmd_full(self, msg: LowCmd_) -> None:
+        '''Update full-body desired command from incoming low_cmd'''
         with self._lock:
-            self._last_cmd = msg
+            out = self._clip_cmd_or_estop(msg, source='full_body_mode')
+            if out is not None:
+                self._desired_cmd_full = out
 
-            if self._estop:
-                return
+    def _on_low_cmd_lower(self, msg: LowCmd_) -> None:
+        '''Update split-mode lower-body desired command from incoming low_cmd'''
+        with self._lock:
+            out = self._clip_cmd_or_estop(msg, source='split_mode_lower')
+            if out is not None:
+                self._desired_cmd_lower = out
 
-            try:
-                out = clip_low_cmd(msg, self._config['limits'])
-            except CmdValidationError as e:
-                self._trigger_estop(f'Command validation failed: {e}')
-                self._desired_cmd = make_estop_cmd(self._last_cmd)
-                return
+    def _on_low_cmd_upper(self, msg: LowCmd_) -> None:
+        '''Update split-mode upper-body desired command from incoming low_cmd'''
+        with self._lock:
+            out = self._clip_cmd_or_estop(msg, source='split_mode_upper')
+            if out is not None:
+                self._desired_cmd_upper = out
 
-            self._desired_cmd = out
+    def _build_split_cmd_locked(self) -> LowCmd_:
+        '''
+        Merge split commands into one full-body command
+        (lock acquired in caller method)
+        '''
+        merged = copy.deepcopy(self._desired_cmd_upper)
+        # keep torso+arms (12:27) from upper and overwrite legs (0:12) from lower
+        for i in range(SPLIT_UPPER_START):
+            merged.motor_cmd[i] = copy.deepcopy(self._desired_cmd_lower.motor_cmd[i])
+        return merged
+
+    def _get_publish_cmd_locked(self) -> LowCmd_:
+        '''
+        Get command to publish in current mode
+        (lock acquired in caller method)
+        '''
+        if self._mode == 'full_body_mode':
+            return copy.deepcopy(self._desired_cmd_full)
+        return self._build_split_cmd_locked()
 
     def _publisher_loop(self) -> None:
         dt = 1.0 / self._publish_hz
@@ -131,7 +202,7 @@ class SafetyLayer:
                 if self._estop:
                     out = make_estop_cmd(self._last_cmd)
                 else:
-                    out = copy.deepcopy(self._desired_cmd)
+                    out = self._get_publish_cmd_locked()
             self._publish_checked(out)
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
@@ -153,7 +224,9 @@ class SafetyLayer:
                 print(f'dq: {dq}')
                 print(f'ddq: {ddq}')
                 self._trigger_estop(str(e))
-                self._desired_cmd = make_estop_cmd(self._last_cmd)
+                self._desired_cmd_full = make_estop_cmd(self._last_cmd)
+                self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
+                self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
 
         self._log_sample(msg)
 

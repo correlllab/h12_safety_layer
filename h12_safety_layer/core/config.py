@@ -101,6 +101,8 @@ def load_config(path: str | Path) -> dict[str, Any]:
         'mode': str(raw.get('mode', 'full_body_mode')),
         'topics': {
             'low_cmd_in': str(topics.get('low_cmd_in', 'rt/safety/lowcmd_in')),
+            'low_cmd_lower_in': str(topics.get('low_cmd_lower_in', 'rt/safety/lowcmd_lower_in')),
+            'low_cmd_upper_in': str(topics.get('low_cmd_upper_in', 'rt/safety/lowcmd_upper_in')),
             'low_cmd_out': str(topics.get('low_cmd_out', 'rt/lowcmd')),
             'low_state': str(topics.get('low_state', 'rt/lowstate')),
         },

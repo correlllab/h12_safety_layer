@@ -1,0 +1,32 @@
+mode: split_mode
+
+topics:
+  low_cmd_lower_in: rt/safety/lowcmd_lower_in
+  low_cmd_upper_in: rt/safety/lowcmd_upper_in
+  low_cmd_out: rt/lowcmd
+  low_state: rt/lowstate
+
+network:
+  domain_id: 0
+  interface: ''
+
+control:
+  publish_hz: 500.0
+
+limits:
+  # all fields can be scalar or 27-entry lists for per-joint tuning
+  clip:
+    position_offset: 0.05
+    velocity_ratio: 0.08
+    torque_ratio: 0.25
+    kp_max: 500.0
+    kd_max: 30.0
+  estop:
+    position_offset: 0.001
+    velocity_ratio: 0.5
+    torque_ratio: 1.0
+
+logging:
+  enabled: true
+  base_dir: /tmp/h12_safety_layer
+  chunk_prefix: chunk_
