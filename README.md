@@ -7,9 +7,9 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 - This repo depends on [Unitree Python SDK](https://github.com/unitreerobotics/unitree_sdk2_python) to communicate with the robot.
 - Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
 
-  ```bash
-  git submodule update --init --recursive
-  ```
+    ```bash
+    git submodule update --init --recursive
+    ```
 
 ### `uv` Installation
 
@@ -29,3 +29,80 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
     ```bash
     pip install -r requirements.txt # install dependencies for this repo including unitree sdk
     ```
+
+## Files
+
+- `config`: YAML configuration files.
+- `docs`: detailed documentation.
+- `h12_safety_layer`: source codes.
+    - `core/`: core implementation of the safety layer.
+        - `chunk_logger.py` provides logger of robot states and commands.
+        - `config.py` parses and loads YAML configuration files.
+        - `joint_limits.py` defines joint names and joint limits according to the URDF.
+        - `safety_checks.py` defines several safety checks of robot states and commands.
+        - `safety_layer.py` implements the safety layer that relays commands, checks safety and logs in the background.
+    - `script/`: runnable scripts.
+        - `safety_layer_main.py` launches the safety layer.
+    - `unsafe/`: unsafe debugging scripts.
+        - `send_fixed_positions.py` sends a fixed position command for 1 second.
+        - `send_random_positions.py` sends random position commands for 1 second.
+    - `utility/`: utility scripts.
+        - `combine_chunks.py` combines chunked logs.
+        - `record_limits.py` records joint limits to tweak YAML configuration files.
+        - `publisher.py` is a dummy publisher.
+        - `subscriber.py` is a dummy subscriber.
+
+## Usage
+
+- In **Full-Body Mode**, the safety layer relays a single `low_cmd` to the robot with clipping and safety checks.
+
+    ```yaml
+    topics:
+      low_cmd_in: rt/safety/lowcmd_in
+      low_cmd_out: rt/lowcmd
+      low_state: rt/lowstate
+    ```
+
+- In **Split Mode**, the safety layer relays two `low_cmd`, one for lower-body and one for upper-body,
+    with clipping and safety checks.
+
+    ```yaml
+    topics:
+      low_cmd_lower_in: rt/safety/lowcmd_lower_in
+      low_cmd_upper_in: rt/safety/lowcmd_upper_in
+      low_cmd_out: rt/lowcmd
+      low_state: rt/lowstate
+    ```
+
+### `h12_safety_layer/script/safety_layer_main.py`
+
+- **Full-Body Mode**
+    - Run safety-layer in full-body mode with default safety limits:
+
+        ```bash
+        uv run h12_safety_layer/script/safety_layer_main.py --config default_safety_full.yaml
+        ```
+
+    - Run safety-layer in full-body mode with tight safety limits:
+
+        ```bash
+        uv run h12_safety_layer/script/safety_layer_main.py --config tight_safety_full.yaml
+        ```
+
+- **Split Mode**
+    - Run safety-layer in split mode with default safety limits:
+
+        ```bash
+        uv run h12_safety_layer/script/safety_layer_main.py --config default_safety_split.yaml
+        ```
+
+    - Run safety-layer in split mode with tight safety limits:
+
+        ```bash
+        uv run h12_safety_layer/script/safety_layer_main.py --config tight_safety_split.yaml
+        ```
+
+## Detailed Documentation
+
+- [YAML Configuration Definition](docs/config.md)
+- [Safety Layer Architecture](docs/architecture.md)
