@@ -32,9 +32,9 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 
 ## Files
 
-- `config`: YAML configuration files.
-- `docs`: detailed documentation.
-- `h12_safety_layer`: source codes.
+- `config/`: YAML configuration files.
+- `docs/`: detailed documentation.
+- `h12_safety_layer/`: source codes.
     - `core/`: core implementation of the safety layer.
         - `chunk_logger.py` provides logger of robot states and commands.
         - `config.py` parses and loads YAML configuration files.
