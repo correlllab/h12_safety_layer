@@ -30,6 +30,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'safety_layer_node = h12_safety_layer.ros2.safety_layer_node:main',
         ],
     },
 )

@@ -13,10 +13,15 @@ if str(PROJECT_ROOT) not in sys.path:
 from h12_safety_layer.core.config import load_config
 from h12_safety_layer.core.safety_layer import SafetyLayer
 
+def _ensure_yaml_extension(config_path: Path) -> Path:
+    '''Append .yaml when config path has no suffix'''
+    if config_path.suffix:
+        return config_path
+    return config_path.with_suffix('.yaml')
 
 def _resolve_config_path(config_name: str) -> Path:
     '''Resolve config from either bare name or config/<name> path'''
-    config_path = Path(config_name)
+    config_path = _ensure_yaml_extension(Path(config_name))
     if config_path.is_absolute():
         return config_path
     if config_path.parts and config_path.parts[0] == 'config':
