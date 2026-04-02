@@ -29,10 +29,10 @@ def _resolve_config_path(config_name: str) -> Path:
         return share_dir / config_path
     return share_dir / 'config' / config_path
 
-class SafetyLayerNode(Node):
+class SafetyNode(Node):
     '''ROS2 node that manages SafetyLayer lifecycle'''
     def __init__(self, config_name: str = 'default_safety_full.yaml') -> None:
-        super().__init__('safety_layer_node')
+        super().__init__('safety_node')
         config_path = _resolve_config_path(config_name)
         config = load_config(config_path)
         self._safety_layer = SafetyLayer(config)
@@ -59,7 +59,7 @@ class SafetyLayerNode(Node):
 def main(config_name: str = 'default_safety_full.yaml', args: list[str] | None = None) -> None:
     '''Start the ROS2 node and spin until shutdown'''
     rclpy.init(args=args)
-    node = SafetyLayerNode(config_name=config_name)
+    node = SafetyNode(config_name=config_name)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

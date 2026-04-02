@@ -102,9 +102,9 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
         uv run h12_safety_layer/script/safety_layer_main.py --config tight_safety_split.yaml
         ```
 
-### ROS2 Entry Point: `safety_layer_node`
+### ROS2 Entry Point: `safety_node`
 
-- Console entry point is exposed as `safety_layer_node` and runs `h12_safety_layer/ros2/safety_layer_node.py`
+- Console entry point is exposed as `safety_node` and runs `h12_safety_layer/ros2/safety_node.py`
 - Build and source your ROS2 workspace first:
 
     ```bash
@@ -116,26 +116,26 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
     - Run with default safety limits:
 
         ```bash
-        ros2 run h12_safety_layer safety_layer_node --config default_safety_full.yaml
+        ros2 run h12_safety_layer safety_node --config default_safety_full.yaml
         ```
 
     - Run with tight safety limits:
 
         ```bash
-        ros2 run h12_safety_layer safety_layer_node --config tight_safety_full.yaml
+        ros2 run h12_safety_layer safety_node --config tight_safety_full.yaml
         ```
 
 - **Split Mode**
     - Run with default safety limits:
 
         ```bash
-        ros2 run h12_safety_layer safety_layer_node --config default_safety_split.yaml
+        ros2 run h12_safety_layer safety_node --config default_safety_split.yaml
         ```
 
     - Run with tight safety limits:
 
         ```bash
-        ros2 run h12_safety_layer safety_layer_node --config tight_safety_split.yaml
+        ros2 run h12_safety_layer safety_node --config tight_safety_split.yaml
         ```
 
 - `--config` can be a bare config name (resolved from installed package share `config/`) or an absolute path
