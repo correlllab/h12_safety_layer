@@ -56,10 +56,19 @@ class SafetyNode(Node):
             self._worker.join(timeout=1.0)
         return super().destroy_node()
 
-def main(config_name: str = 'default_safety_full.yaml', args: list[str] | None = None) -> None:
-    '''Start the ROS2 node and spin until shutdown'''
-    rclpy.init(args=args)
-    node = SafetyNode(config_name=config_name)
+def main(args: list[str] | None = None) -> None:
+    '''Parse CLI args, start ROS2 node, and spin until shutdown'''
+    parser = argparse.ArgumentParser(description='h12 low_cmd safety relay')
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='default_safety_full.yaml',
+        help='Config name or path, e.g. default_safety_full.yaml or config/default_safety_full.yaml',
+    )
+    parsed_args, ros_args = parser.parse_known_args(args)
+
+    rclpy.init(args=ros_args)
+    node = SafetyNode(config_name=parsed_args.config)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -71,12 +80,4 @@ def main(config_name: str = 'default_safety_full.yaml', args: list[str] | None =
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='h12 low_cmd safety relay')
-    parser.add_argument(
-        '--config',
-        type=str,
-        default='default_safety_full.yaml',
-        help='Config name or path, e.g. default_safety_full.yaml or config/default_safety_full.yaml',
-    )
-    parsed_args, ros_args = parser.parse_known_args()
-    main(config_name=parsed_args.config, args=ros_args)
+    main()
