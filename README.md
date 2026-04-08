@@ -74,6 +74,17 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
       low_state: rt/lowstate
     ```
 
+- **External E-Stop** monitoring is configured with a top-level `estop` section.
+  If `triggered: true` or `plugged_in: false` is received on `estop_topic`, the safety layer enters estop.
+  For simulation where hardware estop is not required, set `enabled: false`.
+
+    ```yaml
+    estop:
+      enabled: true
+      estop_topic: h12/estop_status_raw
+      poll_hz: 500.0
+    ```
+
 ### `h12_safety_layer/script/safety_layer_main.py`
 
 - **Full-Body Mode**
