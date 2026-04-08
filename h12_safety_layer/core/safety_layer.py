@@ -8,13 +8,18 @@ from typing import Any
 
 import numpy as np
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.core.channel import (
+    ChannelFactoryInitialize,
+    ChannelPublisher,
+    ChannelSubscriber,
+)
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_ as LowCmdDefault
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
 
 from h12_safety_layer.core.chunk_logger import ChunkLogger
 from h12_safety_layer.core.config import MOTOR_COUNT
+from h12_safety_layer.core.estop_subscriber import EStopSubscriber
 from h12_safety_layer.core.safety_checks import (
     CmdValidationError,
     EStopTriggered,
@@ -42,8 +47,10 @@ class SafetyLayer:
         self._mode = self._config['mode'].strip().lower()
         # init DDS network interface
         if self._config['network']['interface']:
-            ChannelFactoryInitialize(self._config['network']['domain_id'],
-                                     self._config['network']['interface'])
+            ChannelFactoryInitialize(
+                self._config['network']['domain_id'],
+                self._config['network']['interface'],
+            )
         else:
             ChannelFactoryInitialize(self._config['network']['domain_id'])
         # store last command
@@ -61,12 +68,29 @@ class SafetyLayer:
         self._cmd_sub_full = None
         self._cmd_sub_lower = None
         self._cmd_sub_upper = None
-        self._state_sub = ChannelSubscriber(self._config['topics']['low_state'], LowState_)
+        self._state_sub = ChannelSubscriber(
+            self._config['topics']['low_state'], LowState_
+        )
         self._cmd_pub = ChannelPublisher(self._config['topics']['low_cmd_out'], LowCmd_)
         self._publish_hz = float(self._config['control']['publish_hz'])
         self._publisher_thread = threading.Thread(
             target=self._publisher_loop, name='low_cmd_publisher', daemon=True
         )
+        # estop config
+        estop_config = self._config['estop']
+        self._enable_estop = bool(estop_config['enabled'])
+        # estop subscriber and monitor thread
+        self._estop_poll_hz = float(estop_config['poll_hz'])
+        self._estop_sub = None
+        self._estop_thread = None
+        if self._enable_estop:
+            self._estop_sub = EStopSubscriber(
+                topic=estop_config['estop_topic'],
+                poll_hz=self._estop_poll_hz,
+            )
+            self._estop_thread = threading.Thread(
+                target=self._estop_monitor_loop, name='estop_monitor', daemon=True
+            )
         # setup async logger
         self._logger = None
         if self._config['logging']['enabled']:
@@ -75,7 +99,7 @@ class SafetyLayer:
                 chunk_prefix=self._config['logging']['chunk_prefix'],
                 write_hz=LOG_WRITE_HZ,
                 max_queue_size=LOG_MAX_QUEUE_SIZE,
-                samples_per_chunk=LOG_SAMPLES_PER_CHUNK
+                samples_per_chunk=LOG_SAMPLES_PER_CHUNK,
             )
             self._logger.start()
 
@@ -88,6 +112,9 @@ class SafetyLayer:
         self._state_sub.Init(self._on_low_state, 10)
         self._cmd_pub.Init()
         self._publisher_thread.start()
+        # start estop monitor thread
+        if self._estop_thread is not None:
+            self._estop_thread.start()
         # successfully started, log event
         self._log_event({'event': 'relay_started', 'mode': self._mode})
 
@@ -98,7 +125,10 @@ class SafetyLayer:
         '''Stop relay and flush logger'''
         self._running = False
         self._publisher_thread.join(timeout=1.0)
-        self._publisher_thread = None
+        if self._estop_thread is not None:
+            self._estop_thread.join(timeout=1.0)
+        if self._estop_sub is not None:
+            self._estop_sub.close()
         self._close_cmd_subscribers()
         self._state_sub.Close()
         self._cmd_pub.Close()
@@ -112,17 +142,24 @@ class SafetyLayer:
             return
         if self._mode == 'split_mode':
             return
-        raise ValueError(f'unknown mode: {self._config["mode"]}')
+        mode_name = self._config['mode']
+        raise ValueError(f'Unknown mode: {mode_name}')
 
     def _init_cmd_subscribers(self) -> None:
         '''Init low_cmd subscribers based on configured mode'''
         if self._mode == 'full_body_mode':
-            self._cmd_sub_full = ChannelSubscriber(self._config['topics']['low_cmd_in'], LowCmd_)
+            self._cmd_sub_full = ChannelSubscriber(
+                self._config['topics']['low_cmd_in'], LowCmd_
+            )
             self._cmd_sub_full.Init(self._on_low_cmd_full, 10)
         # split mode
         else:
-            self._cmd_sub_lower = ChannelSubscriber(self._config['topics']['low_cmd_lower_in'], LowCmd_)
-            self._cmd_sub_upper = ChannelSubscriber(self._config['topics']['low_cmd_upper_in'], LowCmd_)
+            self._cmd_sub_lower = ChannelSubscriber(
+                self._config['topics']['low_cmd_lower_in'], LowCmd_
+            )
+            self._cmd_sub_upper = ChannelSubscriber(
+                self._config['topics']['low_cmd_upper_in'], LowCmd_
+            )
             self._cmd_sub_lower.Init(self._on_low_cmd_lower, 10)
             self._cmd_sub_upper.Init(self._on_low_cmd_upper, 10)
 
@@ -148,9 +185,6 @@ class SafetyLayer:
             return clip_low_cmd(msg, self._config['limits'])
         except CmdValidationError as e:
             self._trigger_estop(f'Command validation failed on {source}: {e}')
-            self._desired_cmd_full = make_estop_cmd(self._last_cmd)
-            self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
-            self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
             return None
 
     def _on_low_cmd_full(self, msg: LowCmd_) -> None:
@@ -206,6 +240,33 @@ class SafetyLayer:
             self._publish_checked(out)
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
+    def _estop_monitor_loop(self) -> None:
+        if self._estop_sub is None:
+            return
+
+        dt = 1.0 / self._estop_poll_hz
+        while self._running:
+            start_time = time.time()
+            should_trigger = False
+            reason = ''
+            with self._lock:
+                if self._estop:
+                    pass
+                else:
+                    status = self._estop_sub.latest
+                    if status is not None:
+                        # estop if triggered or unplugged
+                        if status.triggered:
+                            should_trigger = True
+                            reason = 'External estop triggered'
+                        elif not status.plugged_in:
+                            should_trigger = True
+                            reason = 'External estop unplugged'
+                    if should_trigger:
+                        self._trigger_estop(reason)
+            # sleep to maintain poll rate
+            time.sleep(max(0.0, dt - (time.time() - start_time)))
+
     def _on_low_state(self, msg: LowState_) -> None:
         '''Check state limits for estop and log sample'''
         with self._lock:
@@ -214,9 +275,18 @@ class SafetyLayer:
             try:
                 check_estop_limits(msg, self._config['limits'])
             except EStopTriggered as e:
-                q = np.asarray([float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
-                dq = np.asarray([float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
-                ddq = np.asarray([float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)], dtype=np.float32)
+                q = np.asarray(
+                    [float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)],
+                    dtype=np.float32,
+                )
+                dq = np.asarray(
+                    [float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)],
+                    dtype=np.float32,
+                )
+                ddq = np.asarray(
+                    [float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)],
+                    dtype=np.float32,
+                )
                 print(f'q_cmd: {self._last_q_cmd}')
                 print(f'dq_cmd: {self._last_dq_cmd}')
                 print(f'tau_cmd: {self._last_tau_cmd}')
@@ -224,9 +294,6 @@ class SafetyLayer:
                 print(f'dq: {dq}')
                 print(f'ddq: {ddq}')
                 self._trigger_estop(str(e))
-                self._desired_cmd_full = make_estop_cmd(self._last_cmd)
-                self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
-                self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
 
         self._log_sample(msg)
 
@@ -235,11 +302,21 @@ class SafetyLayer:
         msg.crc = self._crc.Crc(msg)
         self._cmd_pub.Write(msg)
         # write local copy for logging
-        self._last_q_cmd = np.asarray([float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_dq_cmd = np.asarray([float(msg.motor_cmd[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_tau_cmd = np.asarray([float(msg.motor_cmd[i].tau) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_kp_cmd = np.asarray([float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        self._last_kd_cmd = np.asarray([float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32)
+        self._last_q_cmd = np.asarray(
+            [float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        self._last_dq_cmd = np.asarray(
+            [float(msg.motor_cmd[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        self._last_tau_cmd = np.asarray(
+            [float(msg.motor_cmd[i].tau) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        self._last_kp_cmd = np.asarray(
+            [float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        self._last_kd_cmd = np.asarray(
+            [float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
 
     def _trigger_estop(self, reason: str) -> None:
         if self._estop:
@@ -247,6 +324,10 @@ class SafetyLayer:
         self._estop = True
         self._estop_reason = reason
         self._log_event({'event': 'estop_triggered', 'reason': reason})
+        # overwrite desired commands with estop command
+        self._desired_cmd_full = make_estop_cmd(self._last_cmd)
+        self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
+        self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
 
     def _log_event(self, data: dict[str, Any]) -> None:
         print(json.dumps(data, sort_keys=True))
@@ -255,16 +336,40 @@ class SafetyLayer:
         '''Build logging dict from low_state message and log via logger'''
         time_stamp = time.time()
 
-        mode = np.asarray([int(msg.motor_state[i].mode) for i in range(MOTOR_COUNT)], dtype=np.uint8)
-        q = np.asarray([float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        dq = np.asarray([float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        ddq = np.asarray([float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        tau_est = np.asarray([float(msg.motor_state[i].tau_est) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        temperature = np.asarray([msg.motor_state[i].temperature for i in range(MOTOR_COUNT)], dtype=np.int16)
-        vol = np.asarray([float(msg.motor_state[i].vol) for i in range(MOTOR_COUNT)], dtype=np.float32)
-        sensor = np.asarray([msg.motor_state[i].sensor for i in range(MOTOR_COUNT)], dtype=np.uint32)
-        motorstate = np.asarray([int(msg.motor_state[i].motorstate) for i in range(MOTOR_COUNT)], dtype=np.uint32)
-        reserve = np.asarray([msg.motor_state[i].reserve for i in range(MOTOR_COUNT)], dtype=np.uint32)
+        mode = np.asarray(
+            [int(msg.motor_state[i].mode) for i in range(MOTOR_COUNT)], dtype=np.uint8
+        )
+        q = np.asarray(
+            [float(msg.motor_state[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        dq = np.asarray(
+            [float(msg.motor_state[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32
+        )
+        ddq = np.asarray(
+            [float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)],
+            dtype=np.float32,
+        )
+        tau_est = np.asarray(
+            [float(msg.motor_state[i].tau_est) for i in range(MOTOR_COUNT)],
+            dtype=np.float32,
+        )
+        temperature = np.asarray(
+            [msg.motor_state[i].temperature for i in range(MOTOR_COUNT)], dtype=np.int16
+        )
+        vol = np.asarray(
+            [float(msg.motor_state[i].vol) for i in range(MOTOR_COUNT)],
+            dtype=np.float32,
+        )
+        sensor = np.asarray(
+            [msg.motor_state[i].sensor for i in range(MOTOR_COUNT)], dtype=np.uint32
+        )
+        motorstate = np.asarray(
+            [int(msg.motor_state[i].motorstate) for i in range(MOTOR_COUNT)],
+            dtype=np.uint32,
+        )
+        reserve = np.asarray(
+            [msg.motor_state[i].reserve for i in range(MOTOR_COUNT)], dtype=np.uint32
+        )
 
         imu_quaternion = np.asarray(msg.imu_state.quaternion, dtype=np.float32)
         imu_gyroscope = np.asarray(msg.imu_state.gyroscope, dtype=np.float32)

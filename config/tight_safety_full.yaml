@@ -12,6 +12,11 @@ network:
 control:
   publish_hz: 500.0
 
+estop:
+  enabled: true
+  estop_topic: h12/estop_status_raw
+  poll_hz: 500.0
+
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
   clip:
