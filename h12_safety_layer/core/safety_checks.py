@@ -5,7 +5,7 @@ import numpy as np
 
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 
-from h12_safety_layer.core.joint_limits import MOTOR_COUNT
+from h12_safety_layer.core.joint_limits import JOINT_NAMES, MOTOR_COUNT
 
 class CmdValidationError(Exception):
     '''Command payload contains non-finite values'''
@@ -84,17 +84,17 @@ def check_estop_limits(msg: LowState_, limits: dict[str, np.ndarray]) -> None:
     bad_q = np.where(np.logical_or(q < q_low, q > q_high))[0]
     if bad_q.size > 0:
         i = int(bad_q[0])
-        raise EStopTriggered(f'motor {i} q out of estop range: {q[i]}')
+        raise EStopTriggered(f'motor {i} ({JOINT_NAMES[i]}) q out of estop range: {q[i]}')
     # check joint velocity dq limits
     bad_dq = np.where(np.abs(dq) > limits['dq_estop_limits'])[0]
     if bad_dq.size > 0:
         i = int(bad_dq[0])
-        raise EStopTriggered(f'motor {i} dq out of estop range: {dq[i]}')
+        raise EStopTriggered(f'motor {i} ({JOINT_NAMES[i]}) dq out of estop range: {dq[i]}')
     # check joint torque tau limits
     bad_tau = np.where(np.abs(tau) > limits['tau_estop_limits'])[0]
     if bad_tau.size > 0:
         i = int(bad_tau[0])
-        raise EStopTriggered(f'motor {i} tau out of estop range: {tau[i]}')
+        raise EStopTriggered(f'motor {i} ({JOINT_NAMES[i]}) tau out of estop range: {tau[i]}')
 
 def make_estop_cmd(template: LowCmd_) -> LowCmd_:
     '''Create an estop command preserving headers while zeroing actuators'''
