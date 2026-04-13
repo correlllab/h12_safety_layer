@@ -1,7 +1,8 @@
-mode: full_body_mode
+mode: split_mode
 
 topics:
-  low_cmd_in: rt/safety/lowcmd_in
+  low_cmd_lower_in: rt/safety/lowcmd_lower_in
+  low_cmd_upper_in: rt/safety/lowcmd_upper_in
   low_cmd_out: rt/lowcmd
   low_state: rt/lowstate
 
@@ -13,7 +14,7 @@ control:
   publish_hz: 500.0
 
 estop:
-  enabled: true
+  enabled: false
   estop_topic: h12/estop_status_raw
   poll_hz: 500.0
 

@@ -13,7 +13,7 @@ control:
   publish_hz: 500.0
 
 estop:
-  enabled: true
+  enabled: false
   estop_topic: h12/estop_status_raw
   poll_hz: 500.0
 

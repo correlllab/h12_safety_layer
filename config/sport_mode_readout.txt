@@ -1,0 +1,200 @@
+[q]
+  00 left_hip_yaw_joint: min=-0.162116 max= 0.210386
+  01 left_hip_pitch_joint: min=-0.589821 max=-0.028352
+  02 left_hip_roll_joint: min=-0.230273 max= 0.095427
+  03 left_knee_joint: min= 0.073793 max= 1.045570
+  04 left_ankle_pitch_joint: min=-0.481548 max=-0.062962
+  05 left_ankle_roll_joint: min=-0.082251 max= 0.227658
+  06 right_hip_yaw_joint: min=-0.204224 max= 0.197858
+  07 right_hip_pitch_joint: min=-0.544600 max=-0.026387
+  08 right_hip_roll_joint: min=-0.213032 max= 0.112300
+  09 right_knee_joint: min= 0.078427 max= 1.072287
+  10 right_ankle_pitch_joint: min=-0.495063 max=-0.075981
+  11 right_ankle_roll_joint: min=-0.101717 max= 0.179416
+  12 torso_joint: min=-0.029222 max= 0.100143
+  13 left_shoulder_pitch_joint: min=-0.095371 max= 0.396483
+  14 left_shoulder_roll_joint: min=-0.071671 max= 0.260393
+  15 left_shoulder_yaw_joint: min=-0.132072 max= 0.632216
+  16 left_elbow_joint: min= 0.612740 max= 1.204439
+  17 left_wrist_roll_joint: min=-1.175069 max=-0.010370
+  18 left_wrist_pitch_joint: min= 0.000873 max= 0.016344
+  19 left_wrist_yaw_joint: min= 0.005411 max= 0.027953
+  20 right_shoulder_pitch_joint: min=-0.055692 max= 0.385055
+  21 right_shoulder_roll_joint: min=-0.250260 max=-0.021322
+  22 right_shoulder_yaw_joint: min=-0.504605 max= 0.120515
+  23 right_elbow_joint: min= 0.629358 max= 1.433778
+  24 right_wrist_roll_joint: min=-0.362771 max=-0.010351
+  25 right_wrist_pitch_joint: min= 0.006793 max= 0.205719
+  26 right_wrist_yaw_joint: min= 0.005387 max= 0.222193
+
+[dq]
+  00 left_hip_yaw_joint: min=-2.811628 max= 2.177552
+  01 left_hip_pitch_joint: min=-3.396908 max= 4.015485
+  02 left_hip_roll_joint: min=-1.292239 max= 2.194244
+  03 left_knee_joint: min=-6.314471 max= 5.715578
+  04 left_ankle_pitch_joint: min=-7.084186 max= 11.723856
+  05 left_ankle_roll_joint: min=-2.827348 max= 8.399505
+  06 right_hip_yaw_joint: min=-2.285418 max= 2.342507
+  07 right_hip_pitch_joint: min=-4.533900 max= 3.893579
+  08 right_hip_roll_joint: min=-1.799259 max= 2.760559
+  09 right_knee_joint: min=-7.297992 max= 9.234882
+  10 right_ankle_pitch_joint: min=-6.907330 max= 12.187986
+  11 right_ankle_roll_joint: min=-5.356124 max= 4.746840
+  12 torso_joint: min=-0.897664 max= 1.396428
+  13 left_shoulder_pitch_joint: min=-1.739875 max= 2.035490
+  14 left_shoulder_roll_joint: min=-0.798488 max= 0.476693
+  15 left_shoulder_yaw_joint: min=-0.827940 max= 0.611956
+  16 left_elbow_joint: min=-1.507528 max= 1.452987
+  17 left_wrist_roll_joint: min=-0.199418 max= 1.089126
+  18 left_wrist_pitch_joint: min=-0.651942 max= 1.240990
+  19 left_wrist_yaw_joint: min=-0.730175 max= 0.181010
+  20 right_shoulder_pitch_joint: min=-1.627519 max= 1.919862
+  21 right_shoulder_roll_joint: min=-0.658862 max= 0.650135
+  22 right_shoulder_yaw_joint: min=-0.557103 max= 0.632526
+  23 right_elbow_joint: min=-1.519527 max= 1.903500
+  24 right_wrist_roll_joint: min=-0.302194 max= 0.779262
+  25 right_wrist_pitch_joint: min=-0.768524 max= 0.885107
+  26 right_wrist_yaw_joint: min=-0.589049 max= 0.187146
+
+[ddq]
+  00 left_hip_yaw_joint: min= 0.000000 max= 0.000000
+  01 left_hip_pitch_joint: min= 0.000000 max= 0.000000
+  02 left_hip_roll_joint: min= 0.000000 max= 0.000000
+  03 left_knee_joint: min= 0.000000 max= 0.000000
+  04 left_ankle_pitch_joint: min= 0.000000 max= 0.000000
+  05 left_ankle_roll_joint: min= 0.000000 max= 0.000000
+  06 right_hip_yaw_joint: min= 0.000000 max= 0.000000
+  07 right_hip_pitch_joint: min= 0.000000 max= 0.000000
+  08 right_hip_roll_joint: min= 0.000000 max= 0.000000
+  09 right_knee_joint: min= 0.000000 max= 0.000000
+  10 right_ankle_pitch_joint: min= 0.000000 max= 0.000000
+  11 right_ankle_roll_joint: min= 0.000000 max= 0.000000
+  12 torso_joint: min= 0.000000 max= 0.000000
+  13 left_shoulder_pitch_joint: min= 0.000000 max= 0.000000
+  14 left_shoulder_roll_joint: min= 0.000000 max= 0.000000
+  15 left_shoulder_yaw_joint: min= 0.000000 max= 0.000000
+  16 left_elbow_joint: min= 0.000000 max= 0.000000
+  17 left_wrist_roll_joint: min= 0.000000 max= 0.000000
+  18 left_wrist_pitch_joint: min= 0.000000 max= 0.000000
+  19 left_wrist_yaw_joint: min= 0.000000 max= 0.000000
+  20 right_shoulder_pitch_joint: min= 0.000000 max= 0.000000
+  21 right_shoulder_roll_joint: min= 0.000000 max= 0.000000
+  22 right_shoulder_yaw_joint: min= 0.000000 max= 0.000000
+  23 right_elbow_joint: min= 0.000000 max= 0.000000
+  24 right_wrist_roll_joint: min= 0.000000 max= 0.000000
+  25 right_wrist_pitch_joint: min= 0.000000 max= 0.000000
+  26 right_wrist_yaw_joint: min= 0.000000 max= 0.000000
+
+[tau]
+  00 left_hip_yaw_joint: min=-37.792969 max= 24.082031
+  01 left_hip_pitch_joint: min=-81.281250 max= 109.593750
+  02 left_hip_roll_joint: min=-71.906250 max= 121.875000
+  03 left_knee_joint: min=-165.750000 max= 85.593750
+  04 left_ankle_pitch_joint: min=-22.940653 max= 42.204048
+  05 left_ankle_roll_joint: min=-15.824503 max= 6.529678
+  06 right_hip_yaw_joint: min=-23.203125 max= 25.781250
+  07 right_hip_pitch_joint: min=-94.593750 max= 119.156250
+  08 right_hip_roll_joint: min=-153.656250 max= 59.250000
+  09 right_knee_joint: min=-279.937500 max= 149.156250
+  10 right_ankle_pitch_joint: min=-14.503285 max= 74.352005
+  11 right_ankle_roll_joint: min=-16.362724 max= 27.395081
+  12 torso_joint: min=-25.312500 max= 19.980469
+  13 left_shoulder_pitch_joint: min=-17.402344 max= 30.849609
+  14 left_shoulder_roll_joint: min=-6.328125 max= 14.941406
+  15 left_shoulder_yaw_joint: min=-1.286399 max= 2.628729
+  16 left_elbow_joint: min=-5.537109 max= 3.867188
+  17 left_wrist_roll_joint: min=-0.187500 max= 0.437500
+  18 left_wrist_pitch_joint: min=-0.750000 max= 0.062500
+  19 left_wrist_yaw_joint: min=-0.375000 max= 0.062500
+  20 right_shoulder_pitch_joint: min=-11.250000 max= 32.167969
+  21 right_shoulder_roll_joint: min=-11.689453 max= 3.339844
+  22 right_shoulder_yaw_joint: min=-1.901634 max= 1.062678
+  23 right_elbow_joint: min=-7.119141 max= 2.900391
+  24 right_wrist_roll_joint: min=-0.187500 max= 0.500000
+  25 right_wrist_pitch_joint: min=-0.625000 max= 0.187500
+  26 right_wrist_yaw_joint: min=-0.500000 max= 0.000000
+
+q_offset:
+  - 0.219614 # left_hip_yaw_joint
+  - 2.528352 # left_hip_pitch_joint
+  - 0.199727 # left_hip_roll_joint
+  - 0.193793 # left_knee_joint
+  - 0.415786 # left_ankle_pitch_joint
+  - 0.034141 # left_ankle_roll_joint
+  - 0.225776 # right_hip_yaw_joint
+  - 2.526387 # right_hip_pitch_joint
+  - 0.317700 # right_hip_roll_joint
+  - 0.198427 # right_knee_joint
+  - 0.402271 # right_ankle_pitch_joint
+  - 0.082383 # right_ankle_roll_joint
+  - 2.249857 # torso_joint
+  - 1.173517 # left_shoulder_pitch_joint
+  - 0.308329 # left_shoulder_roll_joint
+  - 2.377784 # left_shoulder_yaw_joint
+  - 1.562740 # left_elbow_joint
+  - 1.834931 # left_wrist_roll_joint
+  - 0.446156 # left_wrist_pitch_joint
+  - 1.242047 # left_wrist_yaw_joint
+  - 1.184945 # right_shoulder_pitch_joint
+  - 0.401322 # right_shoulder_roll_joint
+  - 2.505395 # right_shoulder_yaw_joint
+  - 1.579358 # right_elbow_joint
+  - 2.387229 # right_wrist_roll_joint
+  - 0.256781 # right_wrist_pitch_joint
+  - 1.047807 # right_wrist_yaw_joint
+dq_ratio:
+  - 0.122245 # left_hip_yaw_joint
+  - 0.174586 # left_hip_pitch_joint
+  - 0.095402 # left_hip_roll_joint
+  - 0.451034 # left_knee_joint
+  - 1.302651 # left_ankle_pitch_joint
+  - 0.933278 # left_ankle_roll_joint
+  - 0.101848 # right_hip_yaw_joint
+  - 0.197126 # right_hip_pitch_joint
+  - 0.120024 # right_hip_roll_joint
+  - 0.659634 # right_knee_joint
+  - 1.354221 # right_ankle_pitch_joint
+  - 0.595125 # right_ankle_roll_joint
+  - 0.060714 # torso_joint
+  - 0.226166 # left_shoulder_pitch_joint
+  - 0.088721 # left_shoulder_roll_joint
+  - 0.041397 # left_shoulder_yaw_joint
+  - 0.075376 # left_elbow_joint
+  - 0.034686 # left_wrist_roll_joint
+  - 0.039522 # left_wrist_pitch_joint
+  - 0.023254 # left_wrist_yaw_joint
+  - 0.213318 # right_shoulder_pitch_joint
+  - 0.073207 # right_shoulder_roll_joint
+  - 0.031626 # right_shoulder_yaw_joint
+  - 0.095175 # right_elbow_joint
+  - 0.024817 # right_wrist_roll_joint
+  - 0.028188 # right_wrist_pitch_joint
+  - 0.018760 # right_wrist_yaw_joint
+tau_ratio:
+  - 0.188965 # left_hip_yaw_joint
+  - 0.547969 # left_hip_pitch_joint
+  - 0.609375 # left_hip_roll_joint
+  - 0.552500 # left_knee_joint
+  - 0.703401 # left_ankle_pitch_joint
+  - 0.395613 # left_ankle_roll_joint
+  - 0.128906 # right_hip_yaw_joint
+  - 0.595781 # right_hip_pitch_joint
+  - 0.768281 # right_hip_roll_joint
+  - 0.933125 # right_knee_joint
+  - 1.239200 # right_ankle_pitch_joint
+  - 0.684877 # right_ankle_roll_joint
+  - 0.126562 # torso_joint
+  - 0.771240 # left_shoulder_pitch_joint
+  - 0.373535 # left_shoulder_roll_joint
+  - 0.146040 # left_shoulder_yaw_joint
+  - 0.307617 # left_elbow_joint
+  - 0.023026 # left_wrist_roll_joint
+  - 0.039474 # left_wrist_pitch_joint
+  - 0.019737 # left_wrist_yaw_joint
+  - 0.804199 # right_shoulder_pitch_joint
+  - 0.292236 # right_shoulder_roll_joint
+  - 0.105646 # right_shoulder_yaw_joint
+  - 0.395508 # right_elbow_joint
+  - 0.026316 # right_wrist_roll_joint
+  - 0.032895 # right_wrist_pitch_joint
+  - 0.026316 # right_wrist_yaw_joint
