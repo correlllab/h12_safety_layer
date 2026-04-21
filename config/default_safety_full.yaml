@@ -74,15 +74,15 @@ limits:
       - 0.50 # left_shoulder_yaw_joint
       - 0.70 # left_elbow_joint
       - 0.40 # left_wrist_roll_joint
-      - 0.30 # left_wrist_pitch_joint
-      - 0.30 # left_wrist_yaw_joint
+      - 0.40 # left_wrist_pitch_joint
+      - 0.40 # left_wrist_yaw_joint
       - 0.90 # right_shoulder_pitch_joint
       - 0.50 # right_shoulder_roll_joint
       - 0.50 # right_shoulder_yaw_joint
       - 0.70 # right_elbow_joint
       - 0.40 # right_wrist_roll_joint
-      - 0.30 # right_wrist_pitch_joint
-      - 0.30 # right_wrist_yaw_joint
+      - 0.40 # right_wrist_pitch_joint
+      - 0.40 # right_wrist_yaw_joint
 
 logging:
   enabled: true
