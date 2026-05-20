@@ -1,6 +1,7 @@
 '''Safety layer for full-body H12 control'''
 
 import copy
+import os
 import time
 import json
 import threading
@@ -46,13 +47,20 @@ class SafetyLayer:
         # parse mode
         self._mode = self._config['mode'].strip().lower()
         # init DDS network interface
+        # Prefer $ROS_DOMAIN_ID when set so the safety layer shares a DDS
+        # domain with the controller, walking_node, and MuJoCo bridge. Fall
+        # back to the YAML's network.domain_id only when the env is unset
+        # (bare real-hardware runs where the operator hasn't exported it).
+        env_domain = os.environ.get('ROS_DOMAIN_ID')
+        domain_id = int(env_domain) if env_domain is not None \
+                    else int(self._config['network']['domain_id'])
         if self._config['network']['interface']:
             ChannelFactoryInitialize(
-                self._config['network']['domain_id'],
+                domain_id,
                 self._config['network']['interface'],
             )
         else:
-            ChannelFactoryInitialize(self._config['network']['domain_id'])
+            ChannelFactoryInitialize(domain_id)
         # store last command
         self._last_cmd = LowCmdDefault()
         self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
