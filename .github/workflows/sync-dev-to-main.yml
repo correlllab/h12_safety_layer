@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   sync:
-    name: Copy dev commits to main
+    name: Generate main from dev
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +41,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge dev into main and regenerate dependency files
+      - name: Generate main and regenerate dependency files
         run: |
           set -euo pipefail
 
@@ -53,12 +53,16 @@ jobs:
           rm -rf ../unitree_sdk2_python
           cp -a submodules/unitree_sdk2_python ../unitree_sdk2_python
 
-          git fetch origin dev main
-          git checkout -B main origin/main
-          git merge --no-ff --no-commit origin/dev
+          # Fetch main so --force-with-lease can verify it was not updated concurrently.
+          git fetch origin main
 
-          # main should not ship the submodule config; it uses the adjacent SDK checkout.
+          # main should not ship the submodule config or gitlink; it uses the adjacent SDK checkout.
+          if git ls-files --error-unmatch submodules/unitree_sdk2_python >/dev/null 2>&1; then
+            git submodule deinit -f submodules/unitree_sdk2_python || true
+            git rm -f submodules/unitree_sdk2_python
+          fi
           rm -f .gitmodules
+          rm -rf .git/modules/submodules/unitree_sdk2_python submodules/unitree_sdk2_python
 
           python3 - <<'PY'
           from pathlib import Path
@@ -86,4 +90,4 @@ jobs:
           fi
 
           git commit -m "Sync dev to main"
-          git push origin HEAD:main
+          git push --force-with-lease origin HEAD:main
