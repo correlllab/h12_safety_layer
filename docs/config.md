@@ -55,7 +55,8 @@ Configures DDS Domain ID and network interface settings.
 
 - **`domain_id`** (integer): DDS Domain ID for inter-process communication.
     - Default: `0`.
-    - Must match the robot's domain ID.
+    - Effective value: `ROS_DOMAIN_ID` when that environment variable is set; otherwise `network.domain_id` from the YAML config.
+    - When `ROS_DOMAIN_ID` is unset, this value must match the robot's domain ID.
 - **`interface`** (string): Network interface name (empty string uses default interface).
     - Default: `''` (auto-detect).
     - Example: `eth0`, `wlan0`.
