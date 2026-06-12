@@ -6,8 +6,10 @@ and prints the one-way latency derived from the embedded send timestamp.
 
 import time
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.builtin_interfaces.msg.dds_ import Time_
+
+from h12_safety_layer.utility.dds_init import init_channel_factory_from_env
 
 _seq = 0
 
@@ -23,7 +25,7 @@ def on_message(msg: Time_) -> None:
 
 def main() -> None:
     '''Initialize a channel subscriber and wait for callbacks'''
-    ChannelFactoryInitialize(0)
+    init_channel_factory_from_env()
 
     subscriber = ChannelSubscriber('demo/topic', Time_)
     subscriber.Init(on_message, 10)

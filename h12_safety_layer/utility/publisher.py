@@ -6,13 +6,15 @@ The subscriber measures one-way latency by comparing against its local clock.
 
 import time
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
+from unitree_sdk2py.core.channel import ChannelPublisher
 from unitree_sdk2py.idl.builtin_interfaces.msg.dds_ import Time_
+
+from h12_safety_layer.utility.dds_init import init_channel_factory_from_env
 
 
 def main() -> None:
     '''Initialize a channel publisher and send one message per second'''
-    ChannelFactoryInitialize(0)
+    init_channel_factory_from_env()
 
     publisher = ChannelPublisher('demo/topic', Time_)
     publisher.Init()

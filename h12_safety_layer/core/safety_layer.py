@@ -1,6 +1,7 @@
 '''Safety layer for full-body H12 control'''
 
 import copy
+import os
 import time
 import json
 import threading
@@ -33,6 +34,11 @@ LOG_SAMPLES_PER_CHUNK = 1000
 LOG_WRITE_HZ = 5.0
 LOG_MAX_QUEUE_SIZE = 10000
 SPLIT_UPPER_START = 12
+# Once an upper-body publisher has produced at least one command, treat
+# longer-than-this gaps as a fault and escalate to estop. Designed to detect
+# frame_task_server crashes mid-run; does not fire if upper is never published
+# at all (lower-only deployments stay safe).
+UPPER_STALE_ESTOP_SECONDS = 2.0
 
 
 class SafetyLayer:
@@ -46,13 +52,20 @@ class SafetyLayer:
         # parse mode
         self._mode = self._config['mode'].strip().lower()
         # init DDS network interface
+        # Prefer $ROS_DOMAIN_ID when set so the safety layer shares a DDS
+        # domain with the controller, walking_node, and MuJoCo bridge. Fall
+        # back to the YAML's network.domain_id only when the env is unset
+        # (bare real-hardware runs where the operator hasn't exported it).
+        env_domain = os.environ.get('ROS_DOMAIN_ID')
+        domain_id = int(env_domain) if env_domain is not None \
+                    else int(self._config['network']['domain_id'])
         if self._config['network']['interface']:
             ChannelFactoryInitialize(
-                self._config['network']['domain_id'],
+                domain_id,
                 self._config['network']['interface'],
             )
         else:
-            ChannelFactoryInitialize(self._config['network']['domain_id'])
+            ChannelFactoryInitialize(domain_id)
         # store last command
         self._last_cmd = LowCmdDefault()
         self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
@@ -63,6 +76,7 @@ class SafetyLayer:
         self._desired_cmd_full = make_estop_cmd(self._last_cmd)
         self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
         self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
+        self._last_upper_msg_time: float | None = None
         # init publishers and subscribers
         self._crc = CRC()
         self._cmd_sub_full = None
@@ -207,6 +221,7 @@ class SafetyLayer:
             out = self._clip_cmd_or_estop(msg, source='split_mode_upper')
             if out is not None:
                 self._desired_cmd_upper = out
+                self._last_upper_msg_time = time.time()
 
     def _build_split_cmd_locked(self) -> LowCmd_:
         '''
@@ -236,9 +251,28 @@ class SafetyLayer:
                 if self._estop:
                     out = make_estop_cmd(self._last_cmd)
                 else:
+                    self._check_upper_watchdog_locked(start_time)
                     out = self._get_publish_cmd_locked()
             self._publish_checked(out)
             time.sleep(max(0.0, dt - (time.time() - start_time)))
+
+    def _check_upper_watchdog_locked(self, now: float) -> None:
+        '''
+        Escalate to estop if the upper-body publisher fell silent after having
+        produced at least one command. Only active in split_mode; never fires
+        before the first upper message arrives, so lower-only deployments are
+        unaffected.
+        '''
+        if self._mode != 'split_mode':
+            return
+        if self._last_upper_msg_time is None:
+            return
+        if now - self._last_upper_msg_time > UPPER_STALE_ESTOP_SECONDS:
+            self._trigger_estop(
+                f'Upper-body command stale for '
+                f'{now - self._last_upper_msg_time:.2f}s '
+                f'(> {UPPER_STALE_ESTOP_SECONDS}s)'
+            )
 
     def _estop_monitor_loop(self) -> None:
         if self._estop_sub is None:
