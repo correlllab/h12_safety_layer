@@ -1,0 +1,89 @@
+name: Sync dev to main
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Copy dev commits to main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge dev into main and regenerate dependency files
+        run: |
+          set -euo pipefail
+
+          # Preserve the SDK from dev at the adjacent path used by main-only packaging.
+          if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
+            echo "submodules/unitree_sdk2_python was not initialized correctly" >&2
+            exit 1
+          fi
+          rm -rf ../unitree_sdk2_python
+          cp -a submodules/unitree_sdk2_python ../unitree_sdk2_python
+
+          git fetch origin dev main
+          git checkout -B main origin/main
+          git merge --no-ff --no-commit origin/dev
+
+          # main should not ship the submodule config; it uses the adjacent SDK checkout.
+          rm -f .gitmodules
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text()
+          old = "[tool.uv.workspace]\nmembers = [\n    \"submodules/unitree_sdk2_python\",\n]"
+          new = "[tool.uv.workspace]\nmembers = [\n    \"../unitree_sdk2_python\",\n]"
+          if old in text:
+              path.write_text(text.replace(old, new))
+          elif new not in text:
+              raise SystemExit("Expected [tool.uv.workspace] members block was not found")
+          PY
+
+          uv sync
+          uv export --format requirements-txt --no-hashes -o requirements.txt
+
+          if git ls-files --error-unmatch .gitmodules >/dev/null 2>&1; then
+            git add -A .gitmodules
+          fi
+          git add -A pyproject.toml uv.lock requirements.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit on main."
+            exit 0
+          fi
+
+          git commit -m "Sync dev to main"
+          git push origin HEAD:main
