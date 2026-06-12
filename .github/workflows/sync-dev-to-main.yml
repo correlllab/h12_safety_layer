@@ -45,18 +45,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Preserve the SDK from dev at the adjacent path used by main-only packaging.
+          # Preserve the SDK from dev at the path used by Humanoid Simulation packaging.
           if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
             echo "submodules/unitree_sdk2_python was not initialized correctly" >&2
             exit 1
           fi
-          rm -rf ../unitree_sdk2_python
-          cp -a submodules/unitree_sdk2_python ../unitree_sdk2_python
+          rm -rf ../../../unitree_sdk2_python
+          cp -a submodules/unitree_sdk2_python ../../../unitree_sdk2_python
 
           # Fetch main so --force-with-lease can verify it was not updated concurrently.
           git fetch origin main
 
-          # main should not ship the submodule config or gitlink; it uses the adjacent SDK checkout.
+          # main should not ship the submodule config or gitlink; it uses the Humanoid Simulation SDK checkout.
           if git ls-files --error-unmatch submodules/unitree_sdk2_python >/dev/null 2>&1; then
             git submodule deinit -f submodules/unitree_sdk2_python || true
             git rm -f submodules/unitree_sdk2_python
@@ -70,7 +70,7 @@ jobs:
           path = Path("pyproject.toml")
           text = path.read_text()
           old = "[tool.uv.workspace]\nmembers = [\n    \"submodules/unitree_sdk2_python\",\n]"
-          new = "[tool.uv.workspace]\nmembers = [\n    \"../unitree_sdk2_python\",\n]"
+          new = "[tool.uv.workspace]\nmembers = [\n    \"../../../unitree_sdk2_python\",\n]"
           if old in text:
               path.write_text(text.replace(old, new))
           elif new not in text:
@@ -83,7 +83,13 @@ jobs:
               ```bash
               git submodule update --init --recursive
               ```"""
-          new = "- Download Unitree SDK by cloning it at `../unitree_sdk2_python`, next to this repository."
+          new = (
+              "- The `main` branch is meant to be compatible with "
+              "[Humanoid Simulation](https://github.com/correlllab/Humanoid_Simulation), "
+              "so place Unitree SDK at `../../../unitree_sdk2_python`.\n"
+              "- The [dev branch](https://github.com/correlllab/h12_safety_layer/tree/dev) "
+              "is for local testing."
+          )
           if old in text:
               path.write_text(text.replace(old, new))
           elif new not in text:
