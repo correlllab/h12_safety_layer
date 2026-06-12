@@ -5,6 +5,7 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 ## Installation
 
 - This repo depends on [Unitree Python SDK](https://github.com/unitreerobotics/unitree_sdk2_python) to communicate with the robot.
+- We rely on this [fork](https://github.com/Oya-Tomo/unitree_sdk2_python) for easy integration with `uv`.
 - Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
 
     ```bash

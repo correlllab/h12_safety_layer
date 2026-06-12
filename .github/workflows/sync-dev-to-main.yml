@@ -75,6 +75,19 @@ jobs:
               path.write_text(text.replace(old, new))
           elif new not in text:
               raise SystemExit("Expected [tool.uv.workspace] members block was not found")
+
+          path = Path("README.md")
+          text = path.read_text()
+          old = """- Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
+
+              ```bash
+              git submodule update --init --recursive
+              ```"""
+          new = "- Download Unitree SDK by cloning it at `../unitree_sdk2_python`, next to this repository."
+          if old in text:
+              path.write_text(text.replace(old, new))
+          elif new not in text:
+              raise SystemExit("Expected README Unitree SDK setup block was not found")
           PY
 
           uv sync
@@ -83,7 +96,7 @@ jobs:
           if git ls-files --error-unmatch .gitmodules >/dev/null 2>&1; then
             git add -A .gitmodules
           fi
-          git add -A pyproject.toml uv.lock requirements.txt
+          git add -A pyproject.toml uv.lock requirements.txt README.md
           if git diff --cached --quiet; then
             echo "No changes to commit on main."
             exit 0
