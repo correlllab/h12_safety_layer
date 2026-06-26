@@ -1,0 +1,117 @@
+name: Sync main to dev
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-main-dev
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Apply main changes to dev
+    if: github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply main-only changes and restore dev layout
+        run: |
+          set -euo pipefail
+
+          git fetch origin main dev
+
+          main_head="$(git rev-parse origin/main)"
+
+          latest_dev_to_main_sync="$(git log --grep='^Sync dev to main$' --format='%H' -n 1 origin/main || true)"
+          if [ -z "$latest_dev_to_main_sync" ]; then
+            echo "Could not find a generated 'Sync dev to main' commit on main." >&2
+            exit 1
+          fi
+
+          latest_main_to_dev_source="$(git log --grep='^Sync main to dev$' --format='%(trailers:key=Source-main,valueonly)' -n 1 origin/dev || true)"
+
+          baseline="$latest_dev_to_main_sync"
+          if [ -n "$latest_main_to_dev_source" ] && git merge-base --is-ancestor "$latest_main_to_dev_source" origin/main; then
+            if git merge-base --is-ancestor "$baseline" "$latest_main_to_dev_source"; then
+              baseline="$latest_main_to_dev_source"
+            fi
+          fi
+
+          if [ "$baseline" = "$main_head" ]; then
+            echo "No main-only commits to sync back to dev."
+            exit 0
+          fi
+
+          git checkout -B dev origin/dev
+          git cherry-pick --no-commit -X theirs "$baseline..origin/main"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text()
+          main = "[tool.uv.workspace]\nmembers = [\n    \"../../../unitree_sdk2_python\",\n]"
+          dev = "[tool.uv.workspace]\nmembers = [\n    \"submodules/unitree_sdk2_python\",\n]"
+          if main in text:
+              path.write_text(text.replace(main, dev))
+          elif dev not in text:
+              raise SystemExit("Expected [tool.uv.workspace] members block was not found")
+
+          path = Path("README.md")
+          text = path.read_text()
+          main = (
+              "- The `main` branch is meant to be compatible with "
+              "[HAMS](https://github.com/correlllab/HAMS), "
+              "so place Unitree SDK at `../../../unitree_sdk2_python`.\n"
+              "- The [dev branch](https://github.com/correlllab/h12_safety_layer/tree/dev) "
+              "is for local testing."
+          )
+          dev = """- Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
+
+              ```bash
+              git submodule update --init --recursive
+              ```"""
+          if main in text:
+              path.write_text(text.replace(main, dev))
+          PY
+
+          git submodule update --init --recursive
+          uv sync
+          uv export --format requirements-txt --no-hashes -o requirements.txt
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit on dev."
+            exit 0
+          fi
+
+          git commit -m "Sync main to dev" -m "Source-main: ${main_head}"
+          git push origin HEAD:dev

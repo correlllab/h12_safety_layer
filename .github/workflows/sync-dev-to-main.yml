@@ -10,12 +10,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: sync-dev-to-main
+  group: sync-main-dev
   cancel-in-progress: false
 
 jobs:
   sync:
     name: Generate main from dev
+    if: github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -44,6 +45,7 @@ jobs:
       - name: Generate main and regenerate dependency files
         run: |
           set -euo pipefail
+          source_dev="$(git rev-parse HEAD)"
 
           # Preserve the SDK from dev at the path used by HAMS packaging.
           if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
@@ -108,5 +110,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Sync dev to main"
+          git commit -m "Sync dev to main" -m "Source-dev: ${source_dev}"
           git push --force-with-lease origin HEAD:main
