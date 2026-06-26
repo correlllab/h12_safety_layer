@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Preserve the SDK from dev at the path used by Humanoid Simulation packaging.
+          # Preserve the SDK from dev at the path used by HAMS packaging.
           if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
             echo "submodules/unitree_sdk2_python was not initialized correctly" >&2
             exit 1
@@ -56,7 +56,7 @@ jobs:
           # Fetch main so --force-with-lease can verify it was not updated concurrently.
           git fetch origin main
 
-          # main should not ship the submodule config or gitlink; it uses the Humanoid Simulation SDK checkout.
+          # main should not ship the submodule config or gitlink; it uses the HAMS SDK checkout.
           if git ls-files --error-unmatch submodules/unitree_sdk2_python >/dev/null 2>&1; then
             git submodule deinit -f submodules/unitree_sdk2_python || true
             git rm -f submodules/unitree_sdk2_python
@@ -85,7 +85,7 @@ jobs:
               ```"""
           new = (
               "- The `main` branch is meant to be compatible with "
-              "[Humanoid Simulation](https://github.com/correlllab/Humanoid_Simulation), "
+              "[HAMS](https://github.com/correlllab/HAMS), "
               "so place Unitree SDK at `../../../unitree_sdk2_python`.\n"
               "- The [dev branch](https://github.com/correlllab/h12_safety_layer/tree/dev) "
               "is for local testing."
