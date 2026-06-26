@@ -15,17 +15,16 @@ concurrency:
 
 jobs:
   sync:
-    name: Apply main changes to dev
+    name: Generate dev from main
     if: github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout dev
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: main
           fetch-depth: 0
-          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -42,36 +41,33 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Apply main-only changes and restore dev layout
+      - name: Generate dev and regenerate dependency files
         run: |
           set -euo pipefail
+          source_main="$(git rev-parse HEAD)"
 
-          git fetch origin main dev
+          # Fetch dev so --force-with-lease can verify it was not updated concurrently,
+          # and so the dev-only submodule metadata can be restored.
+          git fetch origin dev
 
-          main_head="$(git rev-parse origin/main)"
-
-          latest_dev_to_main_sync="$(git log --grep='^Sync dev to main$' --format='%H' -n 1 origin/main || true)"
-          if [ -z "$latest_dev_to_main_sync" ]; then
-            echo "Could not find a generated 'Sync dev to main' commit on main." >&2
+          if [ -z "$(git ls-tree origin/dev .gitmodules)" ]; then
+            echo "origin/dev does not contain .gitmodules" >&2
+            exit 1
+          fi
+          if [ -z "$(git ls-tree origin/dev submodules/unitree_sdk2_python)" ]; then
+            echo "origin/dev does not contain submodules/unitree_sdk2_python" >&2
             exit 1
           fi
 
-          latest_main_to_dev_source="$(git log --grep='^Sync main to dev$' --format='%(trailers:key=Source-main,valueonly)' -n 1 origin/dev || true)"
-
-          baseline="$latest_dev_to_main_sync"
-          if [ -n "$latest_main_to_dev_source" ] && git merge-base --is-ancestor "$latest_main_to_dev_source" origin/main; then
-            if git merge-base --is-ancestor "$baseline" "$latest_main_to_dev_source"; then
-              baseline="$latest_main_to_dev_source"
-            fi
+          git checkout origin/dev -- .gitmodules submodules/unitree_sdk2_python
+          # GitHub-hosted runners do not have SSH credentials for submodules.
+          git config -f .gitmodules submodule.submodules/unitree_sdk2_python.url https://github.com/Oya-Tomo/unitree_sdk2_python.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
+            echo "submodules/unitree_sdk2_python was not initialized correctly" >&2
+            exit 1
           fi
-
-          if [ "$baseline" = "$main_head" ]; then
-            echo "No main-only commits to sync back to dev."
-            exit 0
-          fi
-
-          git checkout -B dev origin/dev
-          git cherry-pick --no-commit -X theirs "$baseline..origin/main"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -107,11 +103,11 @@ jobs:
           uv sync
           uv export --format requirements-txt --no-hashes -o requirements.txt
 
-          git add -A
+          git add -A .gitmodules submodules/unitree_sdk2_python pyproject.toml uv.lock requirements.txt README.md
           if git diff --cached --quiet; then
             echo "No changes to commit on dev."
             exit 0
           fi
 
-          git commit -m "Sync main to dev" -m "Source-main: ${main_head}"
-          git push origin HEAD:dev
+          git commit -m "Sync main to dev" -m "Source-main: ${source_main}"
+          git push --force-with-lease origin HEAD:dev

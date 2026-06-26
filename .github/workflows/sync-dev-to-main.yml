@@ -25,7 +25,6 @@ jobs:
         with:
           ref: dev
           fetch-depth: 0
-          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -46,6 +45,11 @@ jobs:
         run: |
           set -euo pipefail
           source_dev="$(git rev-parse HEAD)"
+
+          # GitHub-hosted runners do not have SSH credentials for submodules.
+          git config -f .gitmodules submodule.submodules/unitree_sdk2_python.url https://github.com/Oya-Tomo/unitree_sdk2_python.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
 
           # Preserve the SDK from dev at the path used by HAMS packaging.
           if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
