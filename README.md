@@ -6,11 +6,8 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
 
 - This repo depends on [Unitree Python SDK](https://github.com/unitreerobotics/unitree_sdk2_python) to communicate with the robot.
 - We rely on this [fork](https://github.com/Oya-Tomo/unitree_sdk2_python) for easy integration with `uv`.
-- Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
-
-    ```bash
-    git submodule update --init --recursive
-    ```
+- The `main` branch is meant to be compatible with [HAMS](https://github.com/correlllab/HAMS), so place Unitree SDK at `../../../unitree_sdk2_python`.
+- The [dev branch](https://github.com/correlllab/h12_safety_layer/tree/dev) is for local testing.
 
 ### `uv` Installation
 
