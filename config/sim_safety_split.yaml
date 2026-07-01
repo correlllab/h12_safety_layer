@@ -28,62 +28,8 @@ limits:
     kd_max: 30.0
   estop:
     position_offset: 0.0001
-    velocity_ratio:
-      - 0.20 # left_hip_yaw_joint
-      - 0.25 # left_hip_pitch_joint
-      - 0.20 # left_hip_roll_joint
-      - 0.60 # left_knee_joint
-      - 3.00 # left_ankle_pitch_joint
-      - 3.00 # left_ankle_roll_joint
-      - 0.20 # right_hip_yaw_joint
-      - 0.25 # right_hip_pitch_joint
-      - 0.20 # right_hip_roll_joint
-      - 0.60 # right_knee_joint
-      - 3.00 # right_ankle_pitch_joint
-      - 3.00 # right_ankle_roll_joint
-      - 0.15 # torso_joint
-      - 0.50 # left_shoulder_pitch_joint
-      - 0.50 # left_shoulder_roll_joint
-      - 0.50 # left_shoulder_yaw_joint
-      - 0.30 # left_elbow_joint
-      - 0.30 # left_wrist_roll_joint
-      - 0.30 # left_wrist_pitch_joint
-      - 0.30 # left_wrist_yaw_joint
-      - 0.50 # right_shoulder_pitch_joint
-      - 0.50 # right_shoulder_roll_joint
-      - 0.50 # right_shoulder_yaw_joint
-      - 0.30 # right_elbow_joint
-      - 0.30 # right_wrist_roll_joint
-      - 0.30 # right_wrist_pitch_joint
-      - 0.30 # right_wrist_yaw_joint
-    torque_ratio:
-      - 0.30 # left_hip_yaw_joint
-      - 0.65 # left_hip_pitch_joint
-      - 1.00 # left_hip_roll_joint
-      - 1.00 # left_knee_joint
-      - 0.90 # left_ankle_pitch_joint
-      - 0.90 # left_ankle_roll_joint
-      - 0.30 # right_hip_yaw_joint
-      - 0.65 # right_hip_pitch_joint
-      - 1.00 # right_hip_roll_joint
-      - 1.00 # right_knee_joint
-      - 0.90 # right_ankle_pitch_joint
-      - 0.90 # right_ankle_roll_joint
-      - 0.20 # torso_joint
-      - 0.80 # left_shoulder_pitch_joint
-      - 0.80 # left_shoulder_roll_joint
-      - 0.80 # left_shoulder_yaw_joint
-      - 0.80 # left_elbow_joint
-      - 0.50 # left_wrist_roll_joint
-      - 0.50 # left_wrist_pitch_joint
-      - 0.50 # left_wrist_yaw_joint
-      - 0.80 # right_shoulder_pitch_joint
-      - 0.80 # right_shoulder_roll_joint
-      - 0.80 # right_shoulder_yaw_joint
-      - 0.80 # right_elbow_joint
-      - 0.50 # right_wrist_roll_joint
-      - 0.50 # right_wrist_pitch_joint
-      - 0.50 # right_wrist_yaw_joint
+    velocity_ratio: 2.0
+    torque_ratio: 2.0
 
 logging:
   enabled: true
