@@ -1,7 +1,6 @@
 '''Safety layer for full-body H12 control'''
 
 import copy
-import os
 import time
 import json
 import threading
@@ -9,11 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from unitree_sdk2py.core.channel import (
-    ChannelFactoryInitialize,
-    ChannelPublisher,
-    ChannelSubscriber,
-)
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_ as LowCmdDefault
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
@@ -48,24 +43,12 @@ class SafetyLayer:
         self._lock = threading.Lock()
         self._estop = False
         self._estop_reason = ''
+        # created while holding _lock and emitted only after the first zero
+        # command has been written, so stdout cannot delay estop publication
+        self._pending_estop_report: dict[str, Any] | None = None
         self._running = False
         # parse mode
         self._mode = self._config['mode'].strip().lower()
-        # init DDS network interface
-        # Prefer $ROS_DOMAIN_ID when set so the safety layer shares a DDS
-        # domain with the controller, walking_node, and MuJoCo bridge. Fall
-        # back to the YAML's network.domain_id only when the env is unset
-        # (bare real-hardware runs where the operator hasn't exported it).
-        env_domain = os.environ.get('ROS_DOMAIN_ID')
-        domain_id = int(env_domain) if env_domain is not None \
-                    else int(self._config['network']['domain_id'])
-        if self._config['network']['interface']:
-            ChannelFactoryInitialize(
-                domain_id,
-                self._config['network']['interface'],
-            )
-        else:
-            ChannelFactoryInitialize(domain_id)
         # store last command
         self._last_cmd = LowCmdDefault()
         self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
@@ -253,7 +236,10 @@ class SafetyLayer:
                 else:
                     self._check_upper_watchdog_locked(start_time)
                     out = self._get_publish_cmd_locked()
-            self._publish_checked(out)
+            action_ms = self._publish_checked(out)
+            report = self._get_estop_trigger_report(action_ms)
+            if report is not None:
+                self._log_event(report)
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
     def _check_upper_watchdog_locked(self, now: float) -> None:
@@ -297,12 +283,15 @@ class SafetyLayer:
                             should_trigger = True
                             reason = 'External estop unplugged'
                     if should_trigger:
-                        self._trigger_estop(reason)
+                        self._trigger_estop(
+                            reason, trigger_stamp_ms=status.stamp_ms
+                        )
             # sleep to maintain poll rate
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
     def _on_low_state(self, msg: LowState_) -> None:
         '''Check state limits for estop and log sample'''
+        diagnostic: dict[str, np.ndarray] | None = None
         with self._lock:
             if self._estop:
                 return
@@ -321,20 +310,26 @@ class SafetyLayer:
                     [float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)],
                     dtype=np.float32,
                 )
-                print(f'q_cmd: {self._last_q_cmd}')
-                print(f'dq_cmd: {self._last_dq_cmd}')
-                print(f'tau_cmd: {self._last_tau_cmd}')
-                print(f'q: {q}')
-                print(f'dq: {dq}')
-                print(f'ddq: {ddq}')
+                diagnostic = {
+                    'q_cmd': self._last_q_cmd.copy(),
+                    'dq_cmd': self._last_dq_cmd.copy(),
+                    'tau_cmd': self._last_tau_cmd.copy(),
+                    'q': q,
+                    'dq': dq,
+                    'ddq': ddq,
+                }
                 self._trigger_estop(str(e))
 
+        if diagnostic is not None:
+            for name, values in diagnostic.items():
+                print(f'{name}: {values}')
         self._log_sample(msg)
 
-    def _publish_checked(self, msg: LowCmd_) -> None:
+    def _publish_checked(self, msg: LowCmd_) -> int:
         # write message
         msg.crc = self._crc.Crc(msg)
         self._cmd_pub.Write(msg)
+        action_ms = int(time.time() * 1000)
         # write local copy for logging
         self._last_q_cmd = np.asarray(
             [float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32
@@ -351,17 +346,47 @@ class SafetyLayer:
         self._last_kd_cmd = np.asarray(
             [float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32
         )
+        return action_ms
 
-    def _trigger_estop(self, reason: str) -> None:
+    def _trigger_estop(
+        self, reason: str, trigger_stamp_ms: int | None = None
+    ) -> None:
+        '''Set estop state while holding _lock; defer its log until command write'''
         if self._estop:
             return
         self._estop = True
         self._estop_reason = reason
-        self._log_event({'event': 'estop_triggered', 'reason': reason})
+        decision_ms = int(time.time() * 1000)
+        self._pending_estop_report = {
+            'event': 'estop_command_written',
+            'reason': reason,
+            'trigger_stamp_ms': trigger_stamp_ms,
+            'decision_ms': decision_ms,
+        }
         # overwrite desired commands with estop command
         self._desired_cmd_full = make_estop_cmd(self._last_cmd)
         self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
         self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
+
+    def _get_estop_trigger_report(
+        self, action_ms: int
+    ) -> dict[str, Any] | None:
+        '''Build the one-time timing report after the estop command is written'''
+        with self._lock:
+            report = self._pending_estop_report
+            self._pending_estop_report = None
+
+        if report is None:
+            return None
+
+        report['action_ms'] = action_ms
+        report['decision_to_action_ms'] = action_ms - report['decision_ms']
+        trigger_stamp_ms = report['trigger_stamp_ms']
+        if trigger_stamp_ms is not None:
+            # this requires the estop publisher and safety host clocks to be
+            # synchronized, and a negative value signals clock skew
+            report['trigger_to_action_ms'] = action_ms - trigger_stamp_ms
+        return report
 
     def _log_event(self, data: dict[str, Any]) -> None:
         print(json.dumps(data, sort_keys=True))

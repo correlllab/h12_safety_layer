@@ -9,12 +9,12 @@ import time
 from unitree_sdk2py.core.channel import ChannelPublisher
 from unitree_sdk2py.idl.builtin_interfaces.msg.dds_ import Time_
 
-from h12_safety_layer.utility.dds_init import init_channel_factory_from_env
+from h12_safety_layer.core.config import init_channel_factory, load_config
 
 
-def main() -> None:
+def main(config_path: str) -> None:
     '''Initialize a channel publisher and send one message per second'''
-    init_channel_factory_from_env()
+    init_channel_factory(load_config(config_path))
 
     publisher = ChannelPublisher('demo/topic', Time_)
     publisher.Init()
@@ -31,4 +31,4 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    main('config/default_safety_full.yaml')

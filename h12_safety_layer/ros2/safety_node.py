@@ -8,7 +8,7 @@ import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 
-from h12_safety_layer.core.config import load_config
+from h12_safety_layer.core.config import init_channel_factory, load_config
 from h12_safety_layer.core.safety_layer import SafetyLayer
 
 PACKAGE_NAME = 'h12_safety_layer'
@@ -35,6 +35,7 @@ class SafetyNode(Node):
         super().__init__('safety_node')
         config_path = _resolve_config_path(config_name)
         config = load_config(config_path)
+        init_channel_factory(config)
         self._safety_layer = SafetyLayer(config)
         self._worker = threading.Thread(
             target=self._run_safety_layer,

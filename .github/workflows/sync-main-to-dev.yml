@@ -81,6 +81,15 @@ jobs:
           elif dev not in text:
               raise SystemExit("Expected [tool.uv.workspace] members block was not found")
 
+          for path in Path("config").glob("*.yaml"):
+              if path.name == "sim_safety_split.yaml":
+                  continue
+              text = path.read_text()
+              if "domain_id: 0" in text:
+                  path.write_text(text.replace("domain_id: 0", "domain_id: 1"))
+              elif "domain_id: 1" not in text:
+                  raise SystemExit(f"Expected domain_id in {path}")
+
           path = Path("README.md")
           text = path.read_text()
           main = (
@@ -103,7 +112,7 @@ jobs:
           uv sync
           uv export --format requirements-txt --no-hashes -o requirements.txt
 
-          git add -A .gitmodules submodules/unitree_sdk2_python pyproject.toml uv.lock requirements.txt README.md
+          git add -A .gitmodules submodules/unitree_sdk2_python config pyproject.toml uv.lock requirements.txt README.md
           if git diff --cached --quiet; then
             echo "No changes to commit on dev."
             exit 0

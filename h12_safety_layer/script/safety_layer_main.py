@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from h12_safety_layer.core.config import load_config
+from h12_safety_layer.core.config import init_channel_factory_guard, load_config
 from h12_safety_layer.core.safety_layer import SafetyLayer
 
 def _ensure_yaml_extension(config_path: Path) -> Path:
@@ -32,6 +32,7 @@ def main(config_name: str) -> None:
     '''Start the full-body low_cmd safety relay'''
     config_path = _resolve_config_path(config_name)
     config = load_config(config_path)
+    init_channel_factory_guard(config)
     safety_layer = SafetyLayer(config)
 
     try:

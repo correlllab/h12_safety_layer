@@ -82,6 +82,15 @@ jobs:
           elif new not in text:
               raise SystemExit("Expected [tool.uv.workspace] members block was not found")
 
+          for path in Path("config").glob("*.yaml"):
+              if path.name == "sim_safety_split.yaml":
+                  continue
+              text = path.read_text()
+              if "domain_id: 1" in text:
+                  path.write_text(text.replace("domain_id: 1", "domain_id: 0"))
+              elif "domain_id: 0" not in text:
+                  raise SystemExit(f"Expected domain_id in {path}")
+
           path = Path("README.md")
           text = path.read_text()
           old = """- Download Unitree SDK under `submodules/unitree_sdk2_python` by initializing git submodules:
@@ -108,7 +117,7 @@ jobs:
           if git ls-files --error-unmatch .gitmodules >/dev/null 2>&1; then
             git add -A .gitmodules
           fi
-          git add -A pyproject.toml uv.lock requirements.txt README.md
+          git add -A config pyproject.toml uv.lock requirements.txt README.md
           if git diff --cached --quiet; then
             echo "No changes to commit on main."
             exit 0
