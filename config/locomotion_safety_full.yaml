@@ -1,0 +1,93 @@
+mode: full_body_mode
+
+# LOCOMOTION profile (WSS trot / walk). Velocity estop bands raised midway between
+# the static default and the gait-needed values. TORQUE bands UNCHANGED.
+#   knee 0.60 -> 0.72 (trip ~8.4 -> ~10 rad/s). If it still trips, raise to 0.85.
+
+topics:
+  low_cmd_in: rt/safety/lowcmd_in
+  low_cmd_out: rt/lowcmd
+  low_state: rt/lowstate
+
+network:
+  domain_id: 0
+  interface: ''
+
+control:
+  publish_hz: 500.0
+
+estop:
+  enabled: true
+  estop_topic: h12/estop_status_raw
+  poll_hz: 500.0
+
+limits:
+  clip:
+    position_offset: 0.001
+    velocity_ratio: 0.10
+    torque_ratio: 0.60
+    kp_max: 500.0
+    kd_max: 30.0
+  estop:
+    position_offset: 0.0001
+    velocity_ratio:
+      - 0.28 # left_hip_yaw_joint
+      - 0.35 # left_hip_pitch_joint
+      - 0.32 # left_hip_roll_joint
+      - 0.72 # left_knee_joint
+      - 3.00 # left_ankle_pitch_joint
+      - 3.00 # left_ankle_roll_joint
+      - 0.28 # right_hip_yaw_joint
+      - 0.35 # right_hip_pitch_joint
+      - 0.32 # right_hip_roll_joint
+      - 0.72 # right_knee_joint
+      - 3.00 # right_ankle_pitch_joint
+      - 3.00 # right_ankle_roll_joint
+      - 0.22 # torso_joint
+      - 0.60 # left_shoulder_pitch_joint
+      - 0.60 # left_shoulder_roll_joint
+      - 0.60 # left_shoulder_yaw_joint
+      - 0.40 # left_elbow_joint
+      - 0.40 # left_wrist_roll_joint
+      - 0.40 # left_wrist_pitch_joint
+      - 0.40 # left_wrist_yaw_joint
+      - 0.60 # right_shoulder_pitch_joint
+      - 0.60 # right_shoulder_roll_joint
+      - 0.60 # right_shoulder_yaw_joint
+      - 0.40 # right_elbow_joint
+      - 0.40 # right_wrist_roll_joint
+      - 0.40 # right_wrist_pitch_joint
+      - 0.40 # right_wrist_yaw_joint
+    torque_ratio:
+      - 0.30 # left_hip_yaw_joint
+      - 0.65 # left_hip_pitch_joint
+      - 1.00 # left_hip_roll_joint
+      - 1.00 # left_knee_joint
+      - 0.90 # left_ankle_pitch_joint
+      - 0.90 # left_ankle_roll_joint
+      - 0.30 # right_hip_yaw_joint
+      - 0.65 # right_hip_pitch_joint
+      - 1.00 # right_hip_roll_joint
+      - 1.00 # right_knee_joint
+      - 0.90 # right_ankle_pitch_joint
+      - 0.90 # right_ankle_roll_joint
+      - 0.20 # torso_joint
+      - 0.80 # left_shoulder_pitch_joint
+      - 0.80 # left_shoulder_roll_joint
+      - 0.80 # left_shoulder_yaw_joint
+      - 0.80 # left_elbow_joint
+      - 0.50 # left_wrist_roll_joint
+      - 0.50 # left_wrist_pitch_joint
+      - 0.50 # left_wrist_yaw_joint
+      - 0.80 # right_shoulder_pitch_joint
+      - 0.80 # right_shoulder_roll_joint
+      - 0.80 # right_shoulder_yaw_joint
+      - 0.80 # right_elbow_joint
+      - 0.50 # right_wrist_roll_joint
+      - 0.50 # right_wrist_pitch_joint
+      - 0.50 # right_wrist_yaw_joint
+
+logging:
+  enabled: true
+  base_dir: /tmp/h12_safety_layer
+  chunk_prefix: chunk_
