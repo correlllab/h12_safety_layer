@@ -32,7 +32,8 @@ SPLIT_UPPER_START = 12
 # Once an upper-body publisher has produced at least one command, treat
 # longer-than-this gaps as a fault and escalate to estop. Designed to detect
 # frame_task_server crashes mid-run; does not fire if upper is never published
-# at all (lower-only deployments stay safe).
+# at all (lower-only deployments stay safe). This is only the DEFAULT: the
+# effective timeout comes from config estop.upper_stale_sec (<= 0 disables it).
 UPPER_STALE_ESTOP_SECONDS = 2.0
 
 
@@ -76,6 +77,10 @@ class SafetyLayer:
         # estop config
         estop_config = self._config['estop']
         self._enable_estop = bool(estop_config['enabled'])
+        # upper-body stale watchdog timeout (split_mode only); <= 0 disables it
+        self._upper_stale_sec = float(
+            estop_config.get('upper_stale_sec', UPPER_STALE_ESTOP_SECONDS)
+        )
         # estop subscriber and monitor thread
         self._estop_poll_hz = float(estop_config['poll_hz'])
         self._estop_sub = None
@@ -251,13 +256,15 @@ class SafetyLayer:
         '''
         if self._mode != 'split_mode':
             return
+        if self._upper_stale_sec <= 0.0:
+            return
         if self._last_upper_msg_time is None:
             return
-        if now - self._last_upper_msg_time > UPPER_STALE_ESTOP_SECONDS:
+        if now - self._last_upper_msg_time > self._upper_stale_sec:
             self._trigger_estop(
                 f'Upper-body command stale for '
                 f'{now - self._last_upper_msg_time:.2f}s '
-                f'(> {UPPER_STALE_ESTOP_SECONDS}s)'
+                f'(> {self._upper_stale_sec}s)'
             )
 
     def _estop_monitor_loop(self) -> None:
