@@ -19,9 +19,15 @@ estop:
   poll_hz: 500.0
   # upper-body stale watchdog (split_mode): estop if the upper channel goes
   # silent > this many seconds after publishing (catches a frame_task_server
-  # crash). <= 0 disables it -- only do that deliberately; it removes that
-  # crash protection on the real robot.
-  upper_stale_sec: 2.0
+  # crash). <= 0 disables it.
+  # DISABLED 2026-07-17 (decision: upper-body silence must not estop the
+  # robot). The frame_task<->MJPC handover intentionally leaves the upper
+  # channel silent for stretches (manual toggles, MJPC core restarts), and
+  # the old 2.0 s reaction zeroed ALL 27 motors -- a standing robot fell.
+  # Tradeoff accepted: a frame_task crash now leaves the last stiff arm
+  # command latched; the hardware estop is the backstop. Re-enable (>0)
+  # only after the reaction is scoped to the upper rows.
+  upper_stale_sec: 0.0
 
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
