@@ -21,13 +21,13 @@ estop:
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
   clip:
-    position_offset: 0.001
+    position_offset:  0.01
     velocity_ratio: 0.10
     torque_ratio: 0.60
     kp_max: 500.0
     kd_max: 30.0
   estop:
-    position_offset: 0.0001
+    position_offset: -1.01
     velocity_ratio:
       - 0.20 # left_hip_yaw_joint
       - 0.25 # left_hip_pitch_joint
