@@ -168,6 +168,9 @@ def load_config(path: str | Path) -> dict[str, Any]:
     estop_poll_hz = float(estop.get('poll_hz', 500.0))
     if estop_poll_hz <= 0.0:
         raise ValueError('estop.poll_hz must be positive')
+    # Upper-body staleness watchdog threshold (split_mode only). A value <= 0
+    # disables the watchdog. Default preserves the historical 2.0 s behavior.
+    upper_stale_seconds = float(estop.get('upper_stale_seconds', 2.0))
 
     clip_policy = limits.get('clip', limits.get('enforce', {}))
     estop_policy = limits.get('estop', {})
@@ -201,6 +204,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
             'enabled': estop_enabled,
             'estop_topic': estop_topic,
             'poll_hz': estop_poll_hz,
+            'upper_stale_seconds': upper_stale_seconds,
         },
         'limits': {
             'q_clip_limits': clip_limits['q_limits'],

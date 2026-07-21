@@ -29,10 +29,12 @@ LOG_SAMPLES_PER_CHUNK = 1000
 LOG_WRITE_HZ = 5.0
 LOG_MAX_QUEUE_SIZE = 10000
 SPLIT_UPPER_START = 12
-# Once an upper-body publisher has produced at least one command, treat
-# longer-than-this gaps as a fault and escalate to estop. Designed to detect
-# frame_task_server crashes mid-run; does not fire if upper is never published
-# at all (lower-only deployments stay safe).
+# Default upper-body staleness watchdog threshold. Once an upper-body publisher
+# has produced at least one command, longer-than-this gaps are treated as a
+# fault and escalate to estop. Designed to detect frame_task_server crashes
+# mid-run; does not fire if upper is never published at all (lower-only
+# deployments stay safe). Overridable via estop.upper_stale_seconds in config;
+# a value <= 0 disables the watchdog entirely.
 UPPER_STALE_ESTOP_SECONDS = 2.0
 
 
@@ -60,6 +62,11 @@ class SafetyLayer:
         self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
         self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
         self._last_upper_msg_time: float | None = None
+        self._upper_stale_seconds = float(
+            self._config['estop'].get(
+                'upper_stale_seconds', UPPER_STALE_ESTOP_SECONDS
+            )
+        )
         # init publishers and subscribers
         self._crc = CRC()
         self._cmd_sub_full = None
@@ -251,13 +258,15 @@ class SafetyLayer:
         '''
         if self._mode != 'split_mode':
             return
+        if self._upper_stale_seconds <= 0.0:
+            return
         if self._last_upper_msg_time is None:
             return
-        if now - self._last_upper_msg_time > UPPER_STALE_ESTOP_SECONDS:
+        if now - self._last_upper_msg_time > self._upper_stale_seconds:
             self._trigger_estop(
                 f'Upper-body command stale for '
                 f'{now - self._last_upper_msg_time:.2f}s '
-                f'(> {UPPER_STALE_ESTOP_SECONDS}s)'
+                f'(> {self._upper_stale_seconds}s)'
             )
 
     def _estop_monitor_loop(self) -> None:

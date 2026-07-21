@@ -17,6 +17,8 @@ estop:
   enabled: true
   estop_topic: h12/estop_status_raw
   poll_hz: 500.0
+  # <= 0 disables the upper-body staleness watchdog (split_mode only)
+  upper_stale_seconds: 0.0
 
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
@@ -27,7 +29,36 @@ limits:
     kp_max: 500.0
     kd_max: 30.0
   estop:
-    position_offset: 0.0001
+    # negative offset widens the estop position range past the URDF limits;
+    # wrist pitch/yaw given -0.1 rad extra travel on each bound
+    position_offset:
+      - 0.0001 # left_hip_yaw_joint
+      - 0.0001 # left_hip_pitch_joint
+      - 0.0001 # left_hip_roll_joint
+      - 0.0001 # left_knee_joint
+      - 0.0001 # left_ankle_pitch_joint
+      - 0.0001 # left_ankle_roll_joint
+      - 0.0001 # right_hip_yaw_joint
+      - 0.0001 # right_hip_pitch_joint
+      - 0.0001 # right_hip_roll_joint
+      - 0.0001 # right_knee_joint
+      - 0.0001 # right_ankle_pitch_joint
+      - 0.0001 # right_ankle_roll_joint
+      - 0.0001 # torso_joint
+      - 0.0001 # left_shoulder_pitch_joint
+      - 0.0001 # left_shoulder_roll_joint
+      - 0.0001 # left_shoulder_yaw_joint
+      - 0.0001 # left_elbow_joint
+      - 0.0001 # left_wrist_roll_joint
+      - -0.10  # left_wrist_pitch_joint
+      - -0.10  # left_wrist_yaw_joint
+      - 0.0001 # right_shoulder_pitch_joint
+      - 0.0001 # right_shoulder_roll_joint
+      - 0.0001 # right_shoulder_yaw_joint
+      - 0.0001 # right_elbow_joint
+      - 0.0001 # right_wrist_roll_joint
+      - -0.10  # right_wrist_pitch_joint
+      - -0.10  # right_wrist_yaw_joint
     velocity_ratio:
       - 1.00 # left_hip_yaw_joint
       - 1.00 # left_hip_pitch_joint
@@ -56,7 +87,35 @@ limits:
       - 1.00 # right_wrist_roll_joint
       - 1.00 # right_wrist_pitch_joint
       - 1.00 # right_wrist_yaw_joint
-    torque_ratio: 1.00
+    # wrist pitch/yaw doubled (2.0 x 19 Nm = 38 Nm estop threshold)
+    torque_ratio:
+      - 1.00 # left_hip_yaw_joint
+      - 1.00 # left_hip_pitch_joint
+      - 1.00 # left_hip_roll_joint
+      - 1.00 # left_knee_joint
+      - 1.00 # left_ankle_pitch_joint
+      - 1.00 # left_ankle_roll_joint
+      - 1.00 # right_hip_yaw_joint
+      - 1.00 # right_hip_pitch_joint
+      - 1.00 # right_hip_roll_joint
+      - 1.00 # right_knee_joint
+      - 1.00 # right_ankle_pitch_joint
+      - 1.00 # right_ankle_roll_joint
+      - 1.00 # torso_joint
+      - 1.00 # left_shoulder_pitch_joint
+      - 1.00 # left_shoulder_roll_joint
+      - 1.00 # left_shoulder_yaw_joint
+      - 1.00 # left_elbow_joint
+      - 1.00 # left_wrist_roll_joint
+      - 2.00 # left_wrist_pitch_joint
+      - 2.00 # left_wrist_yaw_joint
+      - 1.00 # right_shoulder_pitch_joint
+      - 1.00 # right_shoulder_roll_joint
+      - 1.00 # right_shoulder_yaw_joint
+      - 1.00 # right_elbow_joint
+      - 1.00 # right_wrist_roll_joint
+      - 2.00 # right_wrist_pitch_joint
+      - 2.00 # right_wrist_yaw_joint
 
 logging:
   enabled: true

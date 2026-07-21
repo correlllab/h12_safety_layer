@@ -17,6 +17,8 @@ estop:
   enabled: false
   estop_topic: h12/estop_status_raw
   poll_hz: 500.0
+  # <= 0 disables the upper-body staleness watchdog (split_mode only)
+  upper_stale_seconds: 0.0
 
 limits:
   # all fields can be scalar or 27-entry lists for per-joint tuning
