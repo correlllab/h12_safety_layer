@@ -140,6 +140,18 @@ class SafetyLayer:
         if self._logger:
             self._logger.stop()
 
+    @property
+    def estop_triggered(self) -> bool:
+        '''True once the layer has latched estop; never clears without restart'''
+        with self._lock:
+            return self._estop
+
+    @property
+    def estop_reason(self) -> str:
+        '''Reason string for the latched estop, empty while healthy'''
+        with self._lock:
+            return self._estop_reason
+
     def _validate_mode(self) -> None:
         '''Validate config mode and raise if unsupported'''
         if self._mode == 'full_body_mode':

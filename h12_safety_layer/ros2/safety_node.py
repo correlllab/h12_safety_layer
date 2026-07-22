@@ -7,11 +7,18 @@ from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
+from std_msgs.msg import Bool
 
 from h12_safety_layer.core.config import init_channel_factory, load_config
 from h12_safety_layer.core.safety_layer import SafetyLayer
 
 PACKAGE_NAME = 'h12_safety_layer'
+# Topic carrying the safety layer's liveness/health flag: True while commands
+# are being relayed, False once estop has latched. Deliberately much slower
+# than control.publish_hz -- consumers only need to notice the latch, not track
+# the control loop.
+HEARTBEAT_TOPIC = '/safety/heartbeat'
+HEARTBEAT_HZ = 10.0
 
 def _ensure_yaml_extension(config_path: Path) -> Path:
     '''Append .yaml when config path has no suffix'''
@@ -43,7 +50,22 @@ class SafetyNode(Node):
             daemon=True,
         )
         self._worker.start()
+        # heartbeat: True until the safety layer latches estop, then False
+        self._heartbeat_pub = self.create_publisher(Bool, HEARTBEAT_TOPIC, 10)
+        self._heartbeat_was_alive = True
+        self._heartbeat_timer = self.create_timer(
+            1.0 / HEARTBEAT_HZ, self._publish_heartbeat
+        )
         self.get_logger().info(f'Loaded config: {config_path}')
+
+    def _publish_heartbeat(self) -> None:
+        '''Publish the estop-latch state, logging the healthy -> tripped edge'''
+        alive = not self._safety_layer.estop_triggered
+        if self._heartbeat_was_alive and not alive:
+            reason = self._safety_layer.estop_reason
+            self.get_logger().error(f'Safety layer estop latched: {reason}')
+        self._heartbeat_was_alive = alive
+        self._heartbeat_pub.publish(Bool(data=alive))
 
     def _run_safety_layer(self) -> None:
         try:
