@@ -25,7 +25,36 @@ limits:
   clip:
     position_offset: 0.001
     velocity_ratio: 1.00
-    torque_ratio: 1.00
+    # elbows raised to 1.1111 x 18 Nm = 20.0 Nm for high-force grasping;
+    # every other joint stays at the URDF limit
+    torque_ratio:
+      - 1.00 # left_hip_yaw_joint
+      - 1.00 # left_hip_pitch_joint
+      - 1.00 # left_hip_roll_joint
+      - 1.00 # left_knee_joint
+      - 1.00 # left_ankle_pitch_joint
+      - 1.00 # left_ankle_roll_joint
+      - 1.00 # right_hip_yaw_joint
+      - 1.00 # right_hip_pitch_joint
+      - 1.00 # right_hip_roll_joint
+      - 1.00 # right_knee_joint
+      - 1.00 # right_ankle_pitch_joint
+      - 1.00 # right_ankle_roll_joint
+      - 1.00 # torso_joint
+      - 1.00 # left_shoulder_pitch_joint
+      - 1.00 # left_shoulder_roll_joint
+      - 1.00 # left_shoulder_yaw_joint
+      - 1.1111 # left_elbow_joint
+      - 1.00 # left_wrist_roll_joint
+      - 1.00 # left_wrist_pitch_joint
+      - 1.00 # left_wrist_yaw_joint
+      - 1.00 # right_shoulder_pitch_joint
+      - 1.00 # right_shoulder_roll_joint
+      - 1.00 # right_shoulder_yaw_joint
+      - 1.1111 # right_elbow_joint
+      - 1.00 # right_wrist_roll_joint
+      - 1.00 # right_wrist_pitch_joint
+      - 1.00 # right_wrist_yaw_joint
     kp_max: 500.0
     kd_max: 30.0
   estop:
@@ -88,6 +117,7 @@ limits:
       - 1.00 # right_wrist_pitch_joint
       - 1.00 # right_wrist_yaw_joint
     # wrist pitch/yaw doubled (2.0 x 19 Nm = 38 Nm estop threshold)
+    # elbows 1.2 x 18 Nm = 21.6 Nm, above the 20.0 Nm elbow clip limit
     torque_ratio:
       - 1.00 # left_hip_yaw_joint
       - 1.00 # left_hip_pitch_joint
@@ -105,14 +135,14 @@ limits:
       - 1.00 # left_shoulder_pitch_joint
       - 1.00 # left_shoulder_roll_joint
       - 1.00 # left_shoulder_yaw_joint
-      - 1.00 # left_elbow_joint
+      - 1.20 # left_elbow_joint
       - 1.00 # left_wrist_roll_joint
       - 2.00 # left_wrist_pitch_joint
       - 2.00 # left_wrist_yaw_joint
       - 1.00 # right_shoulder_pitch_joint
       - 1.00 # right_shoulder_roll_joint
       - 1.00 # right_shoulder_yaw_joint
-      - 1.00 # right_elbow_joint
+      - 1.20 # right_elbow_joint
       - 1.00 # right_wrist_roll_joint
       - 2.00 # right_wrist_pitch_joint
       - 2.00 # right_wrist_yaw_joint
