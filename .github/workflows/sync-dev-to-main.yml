@@ -51,7 +51,7 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive
 
-          # Preserve the SDK from dev at the path used by HAMS packaging.
+          # Preserve the SDK from dev at the path used by GOLEM packaging.
           if [ ! -f submodules/unitree_sdk2_python/pyproject.toml ]; then
             echo "submodules/unitree_sdk2_python was not initialized correctly" >&2
             exit 1
@@ -62,7 +62,7 @@ jobs:
           # Fetch main so --force-with-lease can verify it was not updated concurrently.
           git fetch origin main
 
-          # main should not ship the submodule config or gitlink; it uses the HAMS SDK checkout.
+          # main should not ship the submodule config or gitlink; it uses the GOLEM SDK checkout.
           if git ls-files --error-unmatch submodules/unitree_sdk2_python >/dev/null 2>&1; then
             git submodule deinit -f submodules/unitree_sdk2_python || true
             git rm -f submodules/unitree_sdk2_python
@@ -100,7 +100,7 @@ jobs:
               ```"""
           new = (
               "- The `main` branch is meant to be compatible with "
-              "[HAMS](https://github.com/correlllab/HAMS), "
+              "[GOLEM](https://github.com/correlllab/GOLEM), "
               "so place Unitree SDK at `../../../unitree_sdk2_python`.\n"
               "- The [dev branch](https://github.com/correlllab/h12_safety_layer/tree/dev) "
               "is for local testing."
