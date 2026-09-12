@@ -34,6 +34,6 @@ limits:
     torque_ratio: 3.0
 
 logging:
-  enabled: true
+  enabled: false
   base_dir: /tmp/h12_safety_layer
   chunk_prefix: chunk_

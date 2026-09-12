@@ -85,6 +85,6 @@ limits:
       - 0.90 # right_wrist_yaw_joint
 
 logging:
-  enabled: true
+  enabled: false
   base_dir: /tmp/h12_safety_layer
   chunk_prefix: chunk_
