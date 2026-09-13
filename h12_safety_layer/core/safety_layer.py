@@ -231,6 +231,8 @@ class SafetyLayer:
         (lock acquired in caller method)
         '''
         merged = copy.deepcopy(self._desired_cmd_upper)
+        merged.mode_machine = self._last_cmd.mode_machine
+        merged.mode_pr = self._last_cmd.mode_pr
         # keep torso+arms (12:27) from upper and overwrite legs (0:12) from lower
         for i in range(SPLIT_UPPER_START):
             merged.motor_cmd[i] = copy.deepcopy(self._desired_cmd_lower.motor_cmd[i])
