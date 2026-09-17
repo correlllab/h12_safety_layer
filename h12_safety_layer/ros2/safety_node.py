@@ -6,6 +6,7 @@ from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
+from rclpy.clock import Clock, ClockType
 from ament_index_python.packages import get_package_share_directory
 from std_msgs.msg import Bool
 
@@ -54,7 +55,8 @@ class SafetyNode(Node):
         self._heartbeat_pub = self.create_publisher(Bool, HEARTBEAT_TOPIC, 10)
         self._heartbeat_was_alive = True
         self._heartbeat_timer = self.create_timer(
-            1.0 / HEARTBEAT_HZ, self._publish_heartbeat
+            1.0 / HEARTBEAT_HZ, self._publish_heartbeat,
+            clock=Clock(clock_type=ClockType.STEADY_TIME)
         )
         self.get_logger().info(f'Loaded config: {config_path}')
 
