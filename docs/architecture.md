@@ -8,10 +8,15 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
 
 ## Core Components
 
-### Command Subscriptions
+### Command Inputs
 
-- **Full-Body Mode**: Single subscriber on `low_cmd_in` topic.
-- **Split Mode**: Two subscribers on `low_cmd_lower_in` and `low_cmd_upper_in` topics.
+- **Full-Body Mode**: one reader on the `low_cmd_in` topic.
+- **Split Mode**: two readers, on `low_cmd_lower_in` and `low_cmd_upper_in`.
+- Every input (commands and `low_state`) is a listener-free `LatestReader`
+  (`core/latest_reader.py`) with `KEEP_LAST(1)` QoS, polled by the relay loop.
+  CycloneDDS's C receive thread overwrites the cached sample and never waits
+  on Python, so a slow relay cycle skips stale samples instead of queueing
+  them into a standing delay.
 
 ### Safety Checks Layer
 
@@ -20,15 +25,19 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
     - Triggered on: extreme position deviation, excessive velocity, unrealistic torque commands.
     - Effect: Immediately switches to safe (zero velocity) command.
 
-### Publisher Loop
+### Relay Loop
 
 - Runs at configurable frequency (default 500 Hz).
-- Publishes filtered commands to `low_cmd_out` topic.
+- Each cycle: check the newest `low_state`, validate and clip the newest
+  command on each input, then publish the filtered command to `low_cmd_out`.
+- If a cycle runs long, the publish rate drops; commands are never delayed.
 
-### State Subscriber
+### State Monitoring
 
-- Monitors `low_state` topic for robot joint/IMU data.
-- Triggers estop if state exceeds safety thresholds.
+- Checks the newest `low_state` each relay cycle.
+- Triggers estop if state exceeds safety thresholds, or (real robot only)
+  if `low_state` arrives more than `estop.state_lag_ms` late against the
+  robot's `tick` clock.
 - Provides data for logging.
 
 ### Async Logger
@@ -49,8 +58,8 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
          │
          ↓
     ┌─────────────────────────────────┐
-    │  Command Handler (_on_low_cmd   │
-    │       _full)                    │
+    │  Command intake                 │
+    │  (_take_commands, full input)   │
     │                                 │
     │  • Receive command              │
     │  • Validate format              │
@@ -62,7 +71,7 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
                │  stored
                │
     ┌──────────▼──────────┐         ┌─────────────────┐
-    │  Publisher Loop     │◄───────►│  low_state      │
+    │  Relay Loop         │◄───────►│  low_state      │
     │  (500 Hz)           │         │    topic        │
     │                     │         └────────┬────────┘
     │  • Get desired cmd  │                  │
@@ -95,9 +104,9 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
            │                                     │
            ↓                                     ↓
     ┌────────────────────┐           ┌────────────────────┐
-    │ Lower Handler      │           │ Upper Handler      │
-    │ (_on_low_cmd       │           │ (_on_low_cmd_upper)│
-    │  _lower)           │           │                    │
+    │ Lower intake       │           │ Upper intake       │
+    │ (_take_commands)   │           │ (_take_commands)   │
+    │                    │           │                    │
     │                    │           │ • Validate         │
     │ • Validate         │           │ • Clip             │
     │ • Clip             │           │ • Update           │
@@ -125,7 +134,7 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
               | Merged command
               │
     ┌─────────▼────────────┐         ┌─────────────────┐
-    │  Publisher Loop      │◄───────►│  low_state      │
+    │  Relay Loop          │◄───────►│  low_state      │
     │  (500 Hz)            │         │    topic        │
     │                      │         └────────┬────────┘
     │  • Merge split cmds  │                  │
@@ -152,7 +161,8 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
 
 ### Command Validation (Clipping)
 
-1. Receives incoming `LowCmd` message on callback thread
+1. Takes the newest `LowCmd` on each input in the relay loop (superseded
+   commands are never validated or published)
 2. Calls `clip_low_cmd()` to constrain values:
     - Position: clipped to ±`position_offset` from current state
     - Velocity: scaled to max `velocity_ratio × joint_max_velocity`
@@ -163,15 +173,18 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
 
 ### State Monitoring (Estop)
 
-1. Receives `LowState` message on callback thread
-2. Calls `check_estop_limits()` with stricter thresholds
-3. If any joint violates limits:
+1. Takes the newest `LowState` in the relay loop
+2. On DDS domain 0 (real robot) with `estop.state_lag_ms > 0`, estops if the
+   sample arrived later than that against the robot's `tick` clock
+   (`_update_state_lag`; the sims stamp `tick` in sim steps, so it is off there)
+3. Calls `check_estop_limits()` with stricter thresholds
+4. If any joint violates limits:
     - Sets `_estop = True`
     - Logs event with violation details
     - Prints debug info (position, velocity, acceleration commands vs actual)
-4. Publisher loop detects `_estop` and forces zero-velocity command
+5. The relay loop detects `_estop` and forces zero-velocity command
 
-### Publisher Loop
+### Publishing
 
 1. Every `dt = 1/publish_hz` seconds:
     - If estop: publish `make_estop_cmd()` (zero velocity)
@@ -185,13 +198,13 @@ The safety layer uses a single lock (`_lock`) to protect shared state:
 
 - `_desired_cmd_full` / `_desired_cmd_lower` / `_desired_cmd_upper`.
 - `_estop` and `_estop_reason`.
-- `_last_cmd` and command component caches (`_last_q_cmd`, `_last_dq_cmd`, etc.).
+- `_last_cmd` and the `low_state` lag baseline.
 
 Lock is acquired:
 
-- In command callbacks when updating desired commands.
-- In state callback when checking limits.
-- In publisher loop when reading desired command and estop state.
+- In the relay loop when updating desired commands, checking state limits,
+  and reading the desired command and estop state.
+- In the external estop monitor thread when latching estop.
 
 This ensures no race conditions between state monitoring, command updates, and publishing.
 

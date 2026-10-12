@@ -8,17 +8,20 @@ from typing import Any
 
 import numpy as np
 
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+from cyclonedds.domain import DomainParticipant
+from unitree_sdk2py.core.channel import ChannelPublisher
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_ as LowCmdDefault
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
 
 from h12_safety_layer.core.chunk_logger import ChunkLogger
-from h12_safety_layer.core.config import MOTOR_COUNT
+from h12_safety_layer.core.config import MOTOR_COUNT, dds_domain_id
 from h12_safety_layer.core.estop_subscriber import EStopSubscriber
+from h12_safety_layer.core.latest_reader import LatestReader
 from h12_safety_layer.core.safety_checks import (
     CmdValidationError,
     EStopTriggered,
+    _cmd_arrays,
     check_estop_limits,
     make_estop_cmd,
     clip_low_cmd,
@@ -36,6 +39,14 @@ SPLIT_UPPER_START = 12
 # deployments stay safe). Overridable via estop.upper_stale_seconds in config;
 # a value <= 0 disables the watchdog entirely.
 UPPER_STALE_ESTOP_SECONDS = 2.0
+# How fast [ms per s] the low_state lag baseline may rise to follow clock drift
+# between the robot's tick and this host (500 ppm, well above crystal drift).
+# A transport delay that builds faster than this registers as lag.
+STATE_LAG_DRIFT_MS_PER_S = 0.5
+# LowState_.tick is a uint32 millisecond counter
+TICK_WRAP = 1 << 32
+# DDS domain of the real robot's command bus; the sims refuse to run on it
+REAL_ROBOT_DOMAIN_ID = 0
 
 
 class SafetyLayer:
@@ -53,33 +64,39 @@ class SafetyLayer:
         self._mode = self._config['mode'].strip().lower()
         # store last command
         self._last_cmd = LowCmdDefault()
-        self._last_q_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
-        self._last_dq_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
-        self._last_tau_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
-        self._last_kp_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
-        self._last_kd_cmd = np.zeros((MOTOR_COUNT,), dtype=np.float32)
         self._desired_cmd_full = make_estop_cmd(self._last_cmd)
         self._desired_cmd_lower = make_estop_cmd(self._last_cmd)
         self._desired_cmd_upper = make_estop_cmd(self._last_cmd)
+        # last command written to low_cmd_out (for estop diagnostics and logs)
+        self._last_published_cmd = self._desired_cmd_upper
         self._last_upper_msg_time: float | None = None
         self._upper_stale_seconds = float(
             self._config['estop'].get(
                 'upper_stale_seconds', UPPER_STALE_ESTOP_SECONDS
             )
         )
-        # init publishers and subscribers
+        # init publisher and latest-only readers (created in start)
         self._crc = CRC()
-        self._cmd_sub_full = None
-        self._cmd_sub_lower = None
-        self._cmd_sub_upper = None
-        self._state_sub = ChannelSubscriber(
-            self._config['topics']['low_state'], LowState_
-        )
+        domain_id = dds_domain_id(config)
+        self._participant = DomainParticipant(domain_id)
+        self._state_reader: LatestReader | None = None
+        self._cmd_reader_full: LatestReader | None = None
+        self._cmd_reader_lower: LatestReader | None = None
+        self._cmd_reader_upper: LatestReader | None = None
         self._cmd_pub = ChannelPublisher(self._config['topics']['low_cmd_out'], LowCmd_)
         self._publish_hz = float(self._config['control']['publish_hz'])
-        self._publisher_thread = threading.Thread(
-            target=self._publisher_loop, name='low_cmd_publisher', daemon=True
+        self._relay_thread = threading.Thread(
+            target=self._relay_loop, name='low_cmd_relay', daemon=True
         )
+        # low_state transport-lag estop (real robot only, see _update_state_lag)
+        self._state_lag_ms = (
+            float(self._config['estop']['state_lag_ms'])
+            if domain_id == REAL_ROBOT_DOMAIN_ID else 0.0
+        )
+        self._last_tick: int | None = None
+        self._tick_wraps = 0
+        self._lag_base_ms: float | None = None
+        self._lag_base_time = 0.0
         # estop config
         estop_config = self._config['estop']
         self._enable_estop = bool(estop_config['enabled'])
@@ -111,11 +128,10 @@ class SafetyLayer:
         '''Start subscriptions and keep relay alive'''
         self._validate_mode()
         self._running = True
-        # initialize subscribers and publishers
-        self._init_cmd_subscribers()
-        self._state_sub.Init(self._on_low_state, 10)
+        # initialize readers and publisher
+        self._init_readers()
         self._cmd_pub.Init()
-        self._publisher_thread.start()
+        self._relay_thread.start()
         # start estop monitor thread
         if self._estop_thread is not None:
             self._estop_thread.start()
@@ -128,13 +144,13 @@ class SafetyLayer:
     def stop(self) -> None:
         '''Stop relay and flush logger'''
         self._running = False
-        self._publisher_thread.join(timeout=1.0)
-        if self._estop_thread is not None:
+        if self._relay_thread.is_alive():
+            self._relay_thread.join(timeout=1.0)
+        if self._estop_thread is not None and self._estop_thread.is_alive():
             self._estop_thread.join(timeout=1.0)
         if self._estop_sub is not None:
             self._estop_sub.close()
-        self._close_cmd_subscribers()
-        self._state_sub.Close()
+        self._close_readers()
         self._cmd_pub.Close()
         self._log_event({'event': 'relay_stopped'})
         if self._logger:
@@ -161,35 +177,39 @@ class SafetyLayer:
         mode_name = self._config['mode']
         raise ValueError(f'Unknown mode: {mode_name}')
 
-    def _init_cmd_subscribers(self) -> None:
-        '''Init low_cmd subscribers based on configured mode'''
+    def _init_readers(self) -> None:
+        '''Create latest-only readers for low_state and the mode's command inputs'''
+        topics = self._config['topics']
+        self._state_reader = LatestReader(
+            self._participant, topics['low_state'], LowState_
+        )
         if self._mode == 'full_body_mode':
-            self._cmd_sub_full = ChannelSubscriber(
-                self._config['topics']['low_cmd_in'], LowCmd_
+            self._cmd_reader_full = LatestReader(
+                self._participant, topics['low_cmd_in'], LowCmd_
             )
-            self._cmd_sub_full.Init(self._on_low_cmd_full, 10)
         # split mode
         else:
-            self._cmd_sub_lower = ChannelSubscriber(
-                self._config['topics']['low_cmd_lower_in'], LowCmd_
+            self._cmd_reader_lower = LatestReader(
+                self._participant, topics['low_cmd_lower_in'], LowCmd_
             )
-            self._cmd_sub_upper = ChannelSubscriber(
-                self._config['topics']['low_cmd_upper_in'], LowCmd_
+            self._cmd_reader_upper = LatestReader(
+                self._participant, topics['low_cmd_upper_in'], LowCmd_
             )
-            self._cmd_sub_lower.Init(self._on_low_cmd_lower, 10)
-            self._cmd_sub_upper.Init(self._on_low_cmd_upper, 10)
 
-    def _close_cmd_subscribers(self) -> None:
-        '''Close any active low_cmd subscribers'''
-        if self._cmd_sub_full is not None:
-            self._cmd_sub_full.Close()
-            self._cmd_sub_full = None
-        if self._cmd_sub_lower is not None:
-            self._cmd_sub_lower.Close()
-            self._cmd_sub_lower = None
-        if self._cmd_sub_upper is not None:
-            self._cmd_sub_upper.Close()
-            self._cmd_sub_upper = None
+    def _close_readers(self) -> None:
+        '''Release all readers'''
+        for reader in (
+            self._state_reader,
+            self._cmd_reader_full,
+            self._cmd_reader_lower,
+            self._cmd_reader_upper,
+        ):
+            if reader is not None:
+                reader.close()
+        self._state_reader = None
+        self._cmd_reader_full = None
+        self._cmd_reader_lower = None
+        self._cmd_reader_upper = None
 
     def _clip_cmd_or_estop(self, msg: LowCmd_, source: str) -> LowCmd_ | None:
         '''Clip incoming command and trigger estop on validation failures'''
@@ -203,39 +223,49 @@ class SafetyLayer:
             self._trigger_estop(f'Command validation failed on {source}: {e}')
             return None
 
-    def _on_low_cmd_full(self, msg: LowCmd_) -> None:
-        '''Update full-body desired command from incoming low_cmd'''
-        with self._lock:
-            out = self._clip_cmd_or_estop(msg, source='full_body_mode')
-            if out is not None:
-                self._desired_cmd_full = out
-
-    def _on_low_cmd_lower(self, msg: LowCmd_) -> None:
-        '''Update split-mode lower-body desired command from incoming low_cmd'''
-        with self._lock:
-            out = self._clip_cmd_or_estop(msg, source='split_mode_lower')
-            if out is not None:
-                self._desired_cmd_lower = out
-
-    def _on_low_cmd_upper(self, msg: LowCmd_) -> None:
-        '''Update split-mode upper-body desired command from incoming low_cmd'''
-        with self._lock:
-            out = self._clip_cmd_or_estop(msg, source='split_mode_upper')
-            if out is not None:
-                self._desired_cmd_upper = out
-                self._last_upper_msg_time = time.time()
+    def _take_commands(self, now: float) -> None:
+        '''
+        Validate and clip the newest command on each input. A command
+        superseded before this cycle is never validated or published.
+        '''
+        if self._cmd_reader_full is not None:
+            msg = self._cmd_reader_full.take_latest()
+            if msg is not None:
+                with self._lock:
+                    out = self._clip_cmd_or_estop(msg, source='full_body_mode')
+                    if out is not None:
+                        self._desired_cmd_full = out
+        if self._cmd_reader_lower is not None:
+            msg = self._cmd_reader_lower.take_latest()
+            if msg is not None:
+                with self._lock:
+                    out = self._clip_cmd_or_estop(msg, source='split_mode_lower')
+                    if out is not None:
+                        self._desired_cmd_lower = out
+        if self._cmd_reader_upper is not None:
+            msg = self._cmd_reader_upper.take_latest()
+            if msg is not None:
+                with self._lock:
+                    out = self._clip_cmd_or_estop(msg, source='split_mode_upper')
+                    if out is not None:
+                        self._desired_cmd_upper = out
+                        self._last_upper_msg_time = now
 
     def _build_split_cmd_locked(self) -> LowCmd_:
         '''
         Merge split commands into one full-body command
         (lock acquired in caller method)
         '''
-        merged = copy.deepcopy(self._desired_cmd_upper)
+        # shallow: the desired commands are replaced, never mutated, so the
+        # merged message can share their motor entries
+        merged = copy.copy(self._desired_cmd_upper)
         merged.mode_machine = self._last_cmd.mode_machine
         merged.mode_pr = self._last_cmd.mode_pr
-        # keep torso+arms (12:27) from upper and overwrite legs (0:12) from lower
-        for i in range(SPLIT_UPPER_START):
-            merged.motor_cmd[i] = copy.deepcopy(self._desired_cmd_lower.motor_cmd[i])
+        # keep torso+arms (12:27) from upper and take legs (0:12) from lower
+        merged.motor_cmd = (
+            self._desired_cmd_lower.motor_cmd[:SPLIT_UPPER_START]
+            + self._desired_cmd_upper.motor_cmd[SPLIT_UPPER_START:]
+        )
         return merged
 
     def _get_publish_cmd_locked(self) -> LowCmd_:
@@ -244,13 +274,23 @@ class SafetyLayer:
         (lock acquired in caller method)
         '''
         if self._mode == 'full_body_mode':
-            return copy.deepcopy(self._desired_cmd_full)
+            # shallow: only the header (crc) of the published copy is written
+            return copy.copy(self._desired_cmd_full)
         return self._build_split_cmd_locked()
 
-    def _publisher_loop(self) -> None:
+    def _relay_loop(self) -> None:
+        '''
+        Once per cycle: check the newest low_state, take the newest commands,
+        publish. Every input is read latest-only, so a slow cycle lowers the
+        publish rate instead of delaying commands.
+        '''
         dt = 1.0 / self._publish_hz
         while self._running:
             start_time = time.time()
+            state = self._state_reader.take_latest()
+            if state is not None:
+                self._on_low_state(state, start_time)
+            self._take_commands(start_time)
             with self._lock:
                 if self._estop:
                     out = make_estop_cmd(self._last_cmd)
@@ -312,12 +352,40 @@ class SafetyLayer:
             # sleep to maintain poll rate
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
-    def _on_low_state(self, msg: LowState_) -> None:
-        '''Check state limits for estop and log sample'''
+    def _update_state_lag(self, msg: LowState_, now: float) -> float:
+        '''
+        Return how late [ms] this low_state arrived, judged by the robot's
+        millisecond tick against this host's clock. The baseline is the
+        earliest arrival seen; it may rise by STATE_LAG_DRIFT_MS_PER_S to
+        follow clock drift, so only a delay that builds faster registers.
+        '''
+        tick = int(msg.tick)
+        if self._last_tick is not None and tick < self._last_tick - TICK_WRAP // 2:
+            self._tick_wraps += 1
+        self._last_tick = tick
+        offset_ms = now * 1000.0 - (tick + self._tick_wraps * TICK_WRAP)
+        if self._lag_base_ms is None:
+            self._lag_base_ms = offset_ms
+        else:
+            drift_ms = STATE_LAG_DRIFT_MS_PER_S * (now - self._lag_base_time)
+            self._lag_base_ms = min(offset_ms, self._lag_base_ms + drift_ms)
+        self._lag_base_time = now
+        return offset_ms - self._lag_base_ms
+
+    def _on_low_state(self, msg: LowState_, now: float) -> None:
+        '''Check state transport lag and limits for estop and log sample'''
         diagnostic: dict[str, np.ndarray] | None = None
         with self._lock:
             if self._estop:
                 return
+            if self._state_lag_ms > 0.0:
+                lag_ms = self._update_state_lag(msg, now)
+                if lag_ms > self._state_lag_ms:
+                    self._trigger_estop(
+                        f'low_state arriving {lag_ms:.0f} ms late '
+                        f'(> {self._state_lag_ms:.0f} ms) against the robot tick'
+                    )
+                    return
             try:
                 check_estop_limits(msg, self._config['limits'])
             except EStopTriggered as e:
@@ -333,10 +401,11 @@ class SafetyLayer:
                     [float(msg.motor_state[i].ddq) for i in range(MOTOR_COUNT)],
                     dtype=np.float32,
                 )
+                q_cmd, dq_cmd, tau_cmd, _, _ = _cmd_arrays(self._last_published_cmd)
                 diagnostic = {
-                    'q_cmd': self._last_q_cmd.copy(),
-                    'dq_cmd': self._last_dq_cmd.copy(),
-                    'tau_cmd': self._last_tau_cmd.copy(),
+                    'q_cmd': q_cmd,
+                    'dq_cmd': dq_cmd,
+                    'tau_cmd': tau_cmd,
                     'q': q,
                     'dq': dq,
                     'ddq': ddq,
@@ -353,22 +422,8 @@ class SafetyLayer:
         msg.crc = self._crc.Crc(msg)
         self._cmd_pub.Write(msg)
         action_ms = int(time.time() * 1000)
-        # write local copy for logging
-        self._last_q_cmd = np.asarray(
-            [float(msg.motor_cmd[i].q) for i in range(MOTOR_COUNT)], dtype=np.float32
-        )
-        self._last_dq_cmd = np.asarray(
-            [float(msg.motor_cmd[i].dq) for i in range(MOTOR_COUNT)], dtype=np.float32
-        )
-        self._last_tau_cmd = np.asarray(
-            [float(msg.motor_cmd[i].tau) for i in range(MOTOR_COUNT)], dtype=np.float32
-        )
-        self._last_kp_cmd = np.asarray(
-            [float(msg.motor_cmd[i].kp) for i in range(MOTOR_COUNT)], dtype=np.float32
-        )
-        self._last_kd_cmd = np.asarray(
-            [float(msg.motor_cmd[i].kd) for i in range(MOTOR_COUNT)], dtype=np.float32
-        )
+        # arrays for diagnostics and logs are built from it only when needed
+        self._last_published_cmd = msg
         return action_ms
 
     def _trigger_estop(
@@ -416,6 +471,8 @@ class SafetyLayer:
 
     def _log_sample(self, msg: LowState_) -> None:
         '''Build logging dict from low_state message and log via logger'''
+        if not self._logger:
+            return
         time_stamp = time.time()
 
         mode = np.asarray(
@@ -458,6 +515,7 @@ class SafetyLayer:
         imu_accelerometer = np.asarray(msg.imu_state.accelerometer, dtype=np.float32)
         imu_rpy = np.asarray(msg.imu_state.rpy, dtype=np.float32)
         imu_temperature = np.int16(msg.imu_state.temperature)
+        q_cmd, dq_cmd, tau_cmd, kp_cmd, kd_cmd = _cmd_arrays(self._last_published_cmd)
 
         sample = {
             'time_stamp': time_stamp,
@@ -476,12 +534,11 @@ class SafetyLayer:
             'imu_accelerometer': imu_accelerometer,
             'imu_rpy': imu_rpy,
             'imu_temperature': imu_temperature,
-            'q_cmd': self._last_q_cmd.copy(),
-            'dq_cmd': self._last_dq_cmd.copy(),
-            'tau_cmd': self._last_tau_cmd.copy(),
-            'kp_cmd': self._last_kp_cmd.copy(),
-            'kd_cmd': self._last_kd_cmd.copy(),
+            'q_cmd': q_cmd.astype(np.float32),
+            'dq_cmd': dq_cmd.astype(np.float32),
+            'tau_cmd': tau_cmd.astype(np.float32),
+            'kp_cmd': kp_cmd.astype(np.float32),
+            'kd_cmd': kd_cmd.astype(np.float32),
         }
 
-        if self._logger:
-            self._logger.log_sample(sample)
+        self._logger.log_sample(sample)

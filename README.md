@@ -81,6 +81,9 @@ Safety layer for H1-2 that filters commands, monitors joint states, and enforces
       enabled: true
       estop_topic: h12/estop_status_raw
       poll_hz: 500.0
+      # estop if rt/lowstate arrives this many ms late against the robot tick
+      # (real robot / DDS domain 0 only; <= 0 disables; default 100)
+      state_lag_ms: 100.0
     ```
 
 ### `h12_safety_layer/script/safety_layer_main.py`

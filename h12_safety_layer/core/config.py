@@ -118,6 +118,11 @@ def _channel_factory_settings(
     return domain_id, network['interface']
 
 
+def dds_domain_id(config: dict[str, Any]) -> int:
+    '''DDS domain the channel factory joins (ROS_DOMAIN_ID wins over config)'''
+    return _channel_factory_settings(config)[0]
+
+
 def init_channel_factory(config: dict[str, Any]) -> None:
     '''Initialize the DDS channel factory from environment and config'''
     domain_id, interface = _channel_factory_settings(config)
@@ -171,6 +176,10 @@ def load_config(path: str | Path) -> dict[str, Any]:
     # Upper-body staleness watchdog threshold (split_mode only). A value <= 0
     # disables the watchdog. Default preserves the historical 2.0 s behavior.
     upper_stale_seconds = float(estop.get('upper_stale_seconds', 2.0))
+    # Estop when rt/lowstate arrives this many ms later than the robot's own
+    # tick clock implies. Only enforced on DDS domain 0 (the real robot): the
+    # sims stamp tick in sim steps, not wall-clock ms. A value <= 0 disables it.
+    state_lag_ms = float(estop.get('state_lag_ms', 100.0))
 
     clip_policy = limits.get('clip', limits.get('enforce', {}))
     estop_policy = limits.get('estop', {})
@@ -205,6 +214,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
             'estop_topic': estop_topic,
             'poll_hz': estop_poll_hz,
             'upper_stale_seconds': upper_stale_seconds,
+            'state_lag_ms': state_lag_ms,
         },
         'limits': {
             'q_clip_limits': clip_limits['q_limits'],
