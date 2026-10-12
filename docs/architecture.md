@@ -4,6 +4,8 @@
 
 ## Overview
 
+The safety layer is the only publisher of `rt/lowcmd`; every controller publishes to its `rt/safety/*` inputs.
+
 The safety layer is a relay that intercepts command messages to the H1-2 robot, applies safety checks and clipping, monitors the robot's state for dangerous conditions, and forwards filtered commands to the robot. It operates in two modes: **Full-Body Mode** (single command input) and **Split Mode** (separate lower/upper body inputs).
 
 ## Core Components
@@ -23,7 +25,7 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
 - **Clipping**: Constrains commands within safe bounds without halting.
 - **Estop (Emergency Stop)**: Monitors robot state and incoming commands for dangerous conditions.
     - Triggered on: extreme position deviation, excessive velocity, unrealistic torque commands.
-    - Effect: Immediately switches to safe (zero velocity) command.
+    - Effect: writes the zero-gain estop command (`make_estop_cmd()`) `ESTOP_FINAL_CMD_COUNT` times (~0.1 s), then stops publishing on `low_cmd_out` until restart.
 
 ### Relay Loop
 
@@ -187,7 +189,7 @@ The safety layer is a relay that intercepts command messages to the H1-2 robot, 
 ### Publishing
 
 1. Every `dt = 1/publish_hz` seconds:
-    - If estop: publish `make_estop_cmd()` (zero velocity)
+    - If estop: publish `make_estop_cmd()` (zero gains) for `ESTOP_FINAL_CMD_COUNT` cycles, then publish nothing
     - Else: publish stored `_desired_cmd`
 2. Calculates CRC checksum
 3. Logs published command and current state

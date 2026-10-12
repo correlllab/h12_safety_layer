@@ -47,6 +47,11 @@ STATE_LAG_DRIFT_MS_PER_S = 0.5
 TICK_WRAP = 1 << 32
 # DDS domain of the real robot's command bus; the sims refuse to run on it
 REAL_ROBOT_DOMAIN_ID = 0
+# Once estopped, the zero-gain estop command is written this many times
+# (~0.1 s at 500 Hz) and then rt/lowcmd goes silent. The burst makes the
+# motors' last-held command the limp one rather than the last live command,
+# with margin for dropped packets.
+ESTOP_FINAL_CMD_COUNT = 50
 
 
 class SafetyLayer:
@@ -97,6 +102,7 @@ class SafetyLayer:
         self._tick_wraps = 0
         self._lag_base_ms: float | None = None
         self._lag_base_time = 0.0
+        self._estop_cmds_written = 0
         # estop config
         estop_config = self._config['estop']
         self._enable_estop = bool(estop_config['enabled'])
@@ -293,14 +299,21 @@ class SafetyLayer:
             self._take_commands(start_time)
             with self._lock:
                 if self._estop:
-                    out = make_estop_cmd(self._last_cmd)
+                    if self._estop_cmds_written >= ESTOP_FINAL_CMD_COUNT:
+                        # estop latched and its final commands written: the
+                        # safety layer no longer publishes on low_cmd_out
+                        out = None
+                    else:
+                        self._estop_cmds_written += 1
+                        out = make_estop_cmd(self._last_cmd)
                 else:
                     self._check_upper_watchdog_locked(start_time)
                     out = self._get_publish_cmd_locked()
-            action_ms = self._publish_checked(out)
-            report = self._get_estop_trigger_report(action_ms)
-            if report is not None:
-                self._log_event(report)
+            if out is not None:
+                action_ms = self._publish_checked(out)
+                report = self._get_estop_trigger_report(action_ms)
+                if report is not None:
+                    self._log_event(report)
             time.sleep(max(0.0, dt - (time.time() - start_time)))
 
     def _check_upper_watchdog_locked(self, now: float) -> None:

@@ -19,8 +19,8 @@ from unitree_sdk2py.utils.crc import CRC
 from h12_safety_layer.core.joint_limits import MOTOR_COUNT, URDF_POSITION_LIMITS
 
 
+# Only the safety layer publishes rt/lowcmd; these scripts exercise its input
 SAFETY_TOPIC = 'rt/safety/lowcmd_in'
-RAW_TOPIC = 'rt/lowcmd'
 
 ARM_WAIST_KPS = [
     150,
@@ -137,11 +137,6 @@ if __name__ == '__main__':
     parser.add_argument('--interface', type=str, default='', help='DDS network interface')
     parser.add_argument('--hz', type=float, default=50.0, help='Publish rate in Hz')
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--safety', action='store_true', help='Publish to rt/safety/lowcmd_in')
-    group.add_argument('--raw', action='store_true', help='Publish to rt/lowcmd')
-
     args = parser.parse_args()
-    topic = SAFETY_TOPIC if args.safety else RAW_TOPIC
     interface = args.interface.strip() or None
-    main(topic=topic, domain_id=args.domain_id, interface=interface, hz=args.hz)
+    main(topic=SAFETY_TOPIC, domain_id=args.domain_id, interface=interface, hz=args.hz)
