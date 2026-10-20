@@ -23,6 +23,7 @@ from h12_safety_layer.core.safety_checks import (
     make_estop_cmd,
     clip_low_cmd,
 )
+from h12_safety_layer.core.safety_logger import PrintSafetyLogger, SafetyLogger
 
 
 LOG_SAMPLES_PER_CHUNK = 1000
@@ -40,13 +41,18 @@ UPPER_STALE_ESTOP_SECONDS = 2.0
 
 class SafetyLayer:
     '''Relay low_cmd with validation, clipping, estop, and async logging'''
-    def __init__(self, config: dict[str, Any]):
+    def __init__(
+        self, config: dict[str, Any], status_logger: SafetyLogger | None = None
+    ):
         self._config = config
+        self._status_logger = (
+            status_logger if status_logger is not None else PrintSafetyLogger()
+        )
         self._lock = threading.Lock()
         self._estop = False
         self._estop_reason = ''
         # created while holding _lock and emitted only after the first zero
-        # command has been written, so stdout cannot delay estop publication
+        # command has been written, so logging cannot delay estop publication
         self._pending_estop_report: dict[str, Any] | None = None
         self._running = False
         # parse mode
@@ -345,7 +351,7 @@ class SafetyLayer:
 
         if diagnostic is not None:
             for name, values in diagnostic.items():
-                print(f'{name}: {values}')
+                self._status_logger.error(f'{name}: {values}')
         self._log_sample(msg)
 
     def _publish_checked(self, msg: LowCmd_) -> int:
@@ -412,7 +418,11 @@ class SafetyLayer:
         return report
 
     def _log_event(self, data: dict[str, Any]) -> None:
-        print(json.dumps(data, sort_keys=True))
+        message = json.dumps(data, sort_keys=True)
+        if data['event'] == 'estop_command_written':
+            self._status_logger.error(message)
+        else:
+            self._status_logger.info(message)
 
     def _log_sample(self, msg: LowState_) -> None:
         '''Build logging dict from low_state message and log via logger'''

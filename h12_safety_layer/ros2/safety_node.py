@@ -43,7 +43,7 @@ class SafetyNode(Node):
         config_path = _resolve_config_path(config_name)
         config = load_config(config_path)
         init_channel_factory(config)
-        self._safety_layer = SafetyLayer(config)
+        self._safety_layer = SafetyLayer(config, status_logger=self.get_logger())
         self._worker = threading.Thread(
             target=self._run_safety_layer,
             name='safety_layer_worker',
