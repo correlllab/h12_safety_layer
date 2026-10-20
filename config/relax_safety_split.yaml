@@ -118,18 +118,20 @@ limits:
       - 1.00 # right_wrist_yaw_joint
     # wrist pitch/yaw doubled (2.0 x 19 Nm = 38 Nm estop threshold)
     # elbows 1.2 x 18 Nm = 21.6 Nm, above the 20.0 Nm elbow clip limit
+    # ankle pitch 1.58334 x 60 Nm = 95 Nm: Unitree's sport mode peaks at 93 Nm
+    # tau_est (right ankle pitch, its walking bags) and would trip 60 Nm in every bag
     torque_ratio:
       - 1.00 # left_hip_yaw_joint
       - 1.00 # left_hip_pitch_joint
       - 1.00 # left_hip_roll_joint
       - 1.00 # left_knee_joint
-      - 1.00 # left_ankle_pitch_joint
+      - 1.58334 # left_ankle_pitch_joint
       - 1.00 # left_ankle_roll_joint
       - 1.00 # right_hip_yaw_joint
       - 1.00 # right_hip_pitch_joint
       - 1.00 # right_hip_roll_joint
       - 1.00 # right_knee_joint
-      - 1.00 # right_ankle_pitch_joint
+      - 1.58334 # right_ankle_pitch_joint
       - 1.00 # right_ankle_roll_joint
       - 1.00 # torso_joint
       - 1.00 # left_shoulder_pitch_joint
